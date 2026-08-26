@@ -1,17 +1,16 @@
-  {
-    "hosting": [
-      {
-        "target": "principal",
-        "public": ".",
-        "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-        "postdeploy": "node postdeploy.js"
-      },
-      ""
-      {
-        "target": "nuevo",
-        "public": ".",
-        "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-        "postdeploy": "node postdeploy.js"
-      }
-    ]
-  }
+{
+  "hosting": [
+    {
+      "target": "principal",
+      "public": ".",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "postdeploy": "node postdeploy.js"
+    },
+    {
+      "target": "nuevo",
+      "public": ".",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "postdeploy": "node postdeploy.js"
+    }
+  ]
+}
