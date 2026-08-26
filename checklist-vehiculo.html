@@ -1,0 +1,1545 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Provectis - Checklist y Plantillas</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+</head>
+<body class="bg-light">
+
+  <div id="app">
+    <nav class="navbar navbar-expand bg-white shadow-sm mb-2 app-nav">
+      <div class="container app-nav__container">
+        <span class="navbar-brand app-nav__brand mb-0">Provectis</span>
+        <div class="navbar-nav app-nav__links">
+          <router-link class="nav-link app-nav__link" to="/" active-class="active">
+            Checklist Vehículo
+          </router-link>
+          <router-link class="nav-link app-nav__link" to="/plantillas" active-class="active">
+            Plantillas Vicente
+          </router-link>
+        </div>
+      </div>
+    </nav>
+    <router-view></router-view>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue-router@4/dist/vue-router.global.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script>
+    // ---- Firebase ----
+    const firebaseConfig = {
+      apiKey: 'AIzaSyDbbr25X6wQlgYqhIVy--jV1Yt9v3gBstM',
+      authDomain: 'checklist-vehiculo-provectis.firebaseapp.com',
+      projectId: 'checklist-vehiculo-provectis',
+      storageBucket: 'checklist-vehiculo-provectis.firebasestorage.app',
+      messagingSenderId: '942275989057',
+      appId: '1:942275989057:web:c5e052c2e5cdcbdf7cc0c0',
+    };
+
+    let db = null;
+    const firebaseListoGlobal = firebaseConfig.apiKey !== 'TU_API_KEY';
+    if (firebaseListoGlobal) {
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+      } catch (err) {
+        console.error('No se pudo inicializar Firebase:', err);
+      }
+    }
+
+    const { createApp, reactive, ref, computed, watch, nextTick } = Vue;
+
+    /* =========================================================
+       VISTA 1: CHECKLIST VEHÍCULO
+       ========================================================= */
+
+    const SEGURIDAD_ITEMS = [
+      { key: 'cinturonSeguridad', label: 'Cinturón de Seguridad' },
+      { key: 'espejoDerecho', label: 'Espejo Retrovisor Derecho' },
+      { key: 'espejoIzquierdo', label: 'Espejo Retrovisor Izquierdo' },
+      { key: 'frenos', label: 'Frenos' },
+      { key: 'direccion', label: 'Dirección' },
+      { key: 'embriague', label: 'Embriague' },
+      { key: 'bocina', label: 'Bocina (Operativa)' },
+      { key: 'carroceria', label: 'Carrocería' },
+      { key: 'pinturaCarroceria', label: 'Pintura Carrocería' },
+      { key: 'vidriosLaterales', label: 'Vidrios Laterales' },
+      { key: 'parabrisas', label: 'Parabrisas' },
+    ];
+
+    const SECCIONES = [
+      {
+        key: 'documentos',
+        label: 'Documentos del Vehículo',
+        items: [
+          { key: 'permisoCirculacion', label: 'Permiso Circulación' },
+          { key: 'certRevisionTecnica', label: 'Cert. Revisión Técnica' },
+          { key: 'certEmisionGases', label: 'Cert. Emisión de Gases' },
+          { key: 'soap', label: 'SOAP' },
+          { key: 'padron', label: 'Padrón' },
+          { key: 'revisionTecnicaAlDia', label: 'Revisión Técnica al Día' },
+        ],
+      },
+      {
+        key: 'neumaticos',
+        label: 'Neumáticos',
+        items: [
+          { key: 'delanteros', label: 'Neumáticos Delanteros' },
+          { key: 'traseros', label: 'Neumáticos Traseros' },
+          { key: 'repuesto', label: 'Neumático de Repuesto' },
+        ],
+      },
+      {
+        key: 'luces',
+        label: 'Luces',
+        items: [
+          { key: 'altas', label: 'Altas' },
+          { key: 'bajas', label: 'Bajas' },
+          { key: 'freno', label: 'Freno' },
+          { key: 'retroceso', label: 'Retroceso' },
+          { key: 'estacionamiento', label: 'Estacionamiento' },
+          { key: 'intermitentesDerecha', label: 'Intermitentes Derecha' },
+          { key: 'intermitentesIzquierda', label: 'Intermitentes Izquierda' },
+        ],
+      },
+      {
+        key: 'herramientas',
+        label: 'Herramientas',
+        items: [
+          { key: 'extintor', label: 'Extintor' },
+          { key: 'botiquin', label: 'Botiquín (Implementos Básicos)' },
+          { key: 'chalecoReflectante', label: 'Chaleco Reflectante' },
+          { key: 'triangulosReflectivos', label: 'Triángulos Reflectivos' },
+          { key: 'gata', label: 'Gata' },
+          { key: 'ruedaRepuesto', label: 'Rueda de Repuesto' },
+          { key: 'llaveRuedaRepuesto', label: 'Llave Rueda Repuesto' },
+        ],
+      },
+    ];
+
+    // ---- Diagrama de daños del vehículo (4 ángulos, siluetas genéricas de referencia) ----
+    const CANVAS_W = 300;
+    const CANVAS_H = 180;
+
+    const SVG_FRENTE = `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
+      <rect x="60" y="40" width="180" height="100" rx="14" fill="#f1f3f5" stroke="#495057" stroke-width="2"/>
+      <path d="M85 40 L95 20 L205 20 L215 40 Z" fill="#dbe4ff" stroke="#495057" stroke-width="2"/>
+      <circle cx="90" cy="130" r="18" fill="#212529"/>
+      <circle cx="210" cy="130" r="18" fill="#212529"/>
+      <circle cx="80" cy="70" r="9" fill="#ffd43b" stroke="#495057" stroke-width="1.5"/>
+      <circle cx="220" cy="70" r="9" fill="#ffd43b" stroke="#495057" stroke-width="1.5"/>
+      <rect x="120" y="120" width="60" height="12" rx="2" fill="#adb5bd" stroke="#495057" stroke-width="1.5"/>
+    </svg>`;
+
+    const SVG_ATRAS = `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
+      <rect x="60" y="40" width="180" height="100" rx="14" fill="#f1f3f5" stroke="#495057" stroke-width="2"/>
+      <rect x="70" y="55" width="55" height="70" rx="4" fill="#e9ecef" stroke="#495057" stroke-width="1.5"/>
+      <rect x="175" y="55" width="55" height="70" rx="4" fill="#e9ecef" stroke="#495057" stroke-width="1.5"/>
+      <line x1="150" y1="45" x2="150" y2="135" stroke="#495057" stroke-width="2"/>
+      <rect x="75" y="60" width="14" height="30" rx="3" fill="#ff6b6b" stroke="#495057" stroke-width="1"/>
+      <rect x="211" y="60" width="14" height="30" rx="3" fill="#ff6b6b" stroke="#495057" stroke-width="1"/>
+      <rect x="130" y="118" width="40" height="14" rx="2" fill="#ffffff" stroke="#495057" stroke-width="1.5"/>
+      <circle cx="90" cy="130" r="18" fill="#212529"/>
+      <circle cx="210" cy="130" r="18" fill="#212529"/>
+    </svg>`;
+
+    const SVG_LATERAL = `<svg viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg">
+      <path d="M30 120 L30 90 Q30 75 45 70 L80 70 L100 40 L200 40 Q220 40 225 60 L255 70 Q270 72 270 90 L270 120 Z"
+            fill="#f1f3f5" stroke="#495057" stroke-width="2"/>
+      <path d="M105 45 L95 68 L150 68 L150 45 Z" fill="#dbe4ff" stroke="#495057" stroke-width="1.5"/>
+      <path d="M155 45 L195 45 L215 68 L155 68 Z" fill="#dbe4ff" stroke="#495057" stroke-width="1.5"/>
+      <circle cx="80" cy="125" r="20" fill="#212529"/>
+      <circle cx="80" cy="125" r="8" fill="#868e96"/>
+      <circle cx="220" cy="125" r="20" fill="#212529"/>
+      <circle cx="220" cy="125" r="8" fill="#868e96"/>
+      <rect x="95" y="90" width="14" height="8" rx="2" fill="#adb5bd" stroke="#495057" stroke-width="1"/>
+    </svg>`;
+
+    const ANGULOS_VEHICULO = [
+      { key: 'frente', label: 'Frente', svg: SVG_FRENTE, espejado: false },
+      { key: 'atras', label: 'Atrás', svg: SVG_ATRAS, espejado: false },
+      { key: 'lateralDerecho', label: 'Costado Derecho', svg: SVG_LATERAL, espejado: false },
+      { key: 'lateralIzquierdo', label: 'Costado Izquierdo', svg: SVG_LATERAL, espejado: true },
+    ];
+
+    function svgDataUrl(angulo) {
+      return 'data:image/svg+xml;utf8,' + encodeURIComponent(angulo.svg);
+    }
+
+    function cargarImagen(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = src;
+      });
+    }
+
+    // Rasteriza la silueta base (SVG) a PNG, respetando el espejado para costado izquierdo
+    async function svgToPngDataUrl(angulo) {
+      const img = await cargarImagen(svgDataUrl(angulo));
+      const c = document.createElement('canvas');
+      c.width = CANVAS_W;
+      c.height = CANVAS_H;
+      const ctx = c.getContext('2d');
+      if (angulo.espejado) {
+        ctx.save();
+        ctx.translate(CANVAS_W, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+      }
+      return c.toDataURL('image/png');
+    }
+
+    function crearEstadoInicial() {
+      const form = {
+        nombreTecnico: '',
+        fecha: new Date().toISOString().slice(0, 10),
+        patente: 'TZ-WS-55',
+        ciudad: 'Valparaíso',
+        proyecto: 'Chilquinta',
+        kmActual: '',
+        observaciones: '',
+      };
+      SECCIONES.forEach((section) => {
+        form[section.key] = {};
+        section.items.forEach((item) => {
+          form[section.key][item.key] = false;
+        });
+      });
+
+      form.seguridad = {};
+      SEGURIDAD_ITEMS.forEach((item) => {
+        form.seguridad[item.key] = 'buen';
+      });
+
+      return form;
+    }
+
+    function formatearFecha(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${d}-${m}-${y}`;
+    }
+
+    const ChecklistVehiculo = {
+      template: `
+        <div class="checklist">
+          <div class="card shadow-sm checklist__card">
+            <div class="card-body">
+              <h1 class="checklist__title h4 mb-1">Check List Vehículos Provectis</h1>
+              <p class="checklist__subtitle text-muted mb-4">Formato N°1</p>
+
+              <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Nombre Técnico de turno</label>
+                  <input v-model="form.nombreTecnico" type="text" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Fecha</label>
+                  <input v-model="form.fecha" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Patente</label>
+                  <input :value="form.patente" type="text" class="form-control" disabled />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Ciudad</label>
+                  <input v-model="form.ciudad" type="text" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Proyecto</label>
+                  <input v-model="form.proyecto" type="text" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label">KM Actual</label>
+                  <input v-model.number="form.kmActual" type="number" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label d-block">KM Última Mantención</label>
+                  <div v-if="!editandoUltimaMantencion" class="checklist__km-proxima">
+                    <span class="checklist__km-proxima-valor">
+                      {{ kmUltimaMantencion.toLocaleString('es-CL') }} km
+                    </span>
+                  </div>
+                  <div v-else class="input-group input-group-sm">
+                    <input v-model.number="kmUltimaEditVal" type="number" class="form-control" />
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label d-block">Fecha Última Mantención</label>
+                  <div v-if="!editandoUltimaMantencion" class="checklist__km-proxima">
+                    <span class="checklist__km-proxima-valor">
+                      {{ formatearFecha(fechaUltimaMantencion) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-link btn-sm p-0 ms-2"
+                      @click="abrirEdicionUltimaMantencion"
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                  <div v-else class="input-group input-group-sm">
+                    <input v-model="fechaUltimaEditVal" type="date" class="form-control" />
+                    <button class="btn btn-success" type="button" @click="guardarUltimaMantencion">
+                      Guardar
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" @click="editandoUltimaMantencion = false">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label d-block">KM Próxima Mantención</label>
+                  <div v-if="!editandoKmProxima" class="checklist__km-proxima">
+                    <span class="checklist__km-proxima-valor">
+                      {{ kmProximaMantencion.toLocaleString('es-CL') }} km
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-link btn-sm p-0 ms-2"
+                      @click="abrirEdicionKmProxima"
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                  <div v-else class="input-group input-group-sm">
+                    <input
+                      v-model.number="kmProximaEditVal"
+                      type="number"
+                      class="form-control"
+                    />
+                    <button class="btn btn-success" type="button" @click="guardarKmProxima">
+                      Guardar
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" @click="editandoKmProxima = false">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="alertaMantencion"
+                class="alert alert-warning checklist__alerta-km"
+                role="alert"
+              >
+                ⚠️ El vehículo (<strong>{{ form.patente }}</strong>) superó el kilometraje de la
+                próxima mantención (<strong>{{ kmProximaMantencion.toLocaleString('es-CL') }} km</strong>).
+                KM actual: <strong>{{ form.kmActual.toLocaleString('es-CL') }} km</strong>. Agendar mantención.
+              </div>
+
+              <div class="mb-4">
+                <h2 class="checklist__section-title h6 text-uppercase text-muted mb-2">
+                  Estado del Vehículo (marcas de daños)
+                </h2>
+                <p class="text-muted small mb-2">
+                  Dibuja sobre cada diagrama para marcar golpes, rayones u otros daños.
+                </p>
+                <div class="row row-cols-2 g-3">
+                  <div class="col" v-for="angulo in angulosVehiculo" :key="angulo.key">
+                    <div class="checklist__danos-cell">
+                      <p class="checklist__danos-label small text-muted mb-1">{{ angulo.label }}</p>
+
+                      <div class="checklist__danos-canvas-wrap">
+                        <img
+                          v-if="editandoAngulo !== angulo.key"
+                          :src="imagenesDanos[angulo.key] || svgDataUrl(angulo)"
+                          :style="!imagenesDanos[angulo.key] && angulo.espejado ? 'transform: scaleX(-1)' : ''"
+                          class="checklist__danos-img"
+                          :alt="angulo.label"
+                        />
+                        <canvas
+                          v-else
+                          :ref="(el) => setCanvasRef(angulo.key, el)"
+                          width="300"
+                          height="180"
+                          class="checklist__danos-canvas"
+                          @pointerdown="iniciarTrazo($event, angulo.key)"
+                          @pointermove="continuarTrazo($event, angulo.key)"
+                          @pointerup="terminarTrazo"
+                          @pointerleave="terminarTrazo"
+                        ></canvas>
+                      </div>
+
+                      <div class="checklist__danos-actions mt-1">
+                        <template v-if="editandoAngulo !== angulo.key">
+                          <button
+                            type="button"
+                            class="btn btn-link btn-sm p-0 me-3"
+                            @click="abrirEdicionAngulo(angulo)"
+                          >
+                            Actualizar
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-link btn-sm p-0 text-danger"
+                            @click="limpiarAngulo(angulo)"
+                          >
+                            Limpiar
+                          </button>
+                        </template>
+                        <template v-else>
+                          <button
+                            type="button"
+                            class="btn btn-success btn-sm me-2"
+                            @click="guardarAngulo(angulo.key)"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            @click="cancelarEdicionAngulo"
+                          >
+                            Cancelar
+                          </button>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-4">
+                <h2 class="checklist__section-title h6 text-uppercase text-muted mb-2">
+                  Seguridad del Vehículo
+                </h2>
+                <div class="checklist__section-list checklist__section-list--radio">
+                  <div class="row checklist__radio-header text-muted small mb-1">
+                    <div class="col-6"></div>
+                    <div class="col-2 text-center">Buen Estado</div>
+                    <div class="col-2 text-center">Regular</div>
+                    <div class="col-2 text-center">Mal Estado</div>
+                  </div>
+                  <div
+                    v-for="item in seguridadItems"
+                    :key="item.key"
+                    class="row checklist__check-row align-items-center"
+                  >
+                    <div class="col-6">{{ item.label }}</div>
+                    <div class="col-2 text-center">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        :name="'seguridad-' + item.key"
+                        value="buen"
+                        v-model="form.seguridad[item.key]"
+                      />
+                    </div>
+                    <div class="col-2 text-center">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        :name="'seguridad-' + item.key"
+                        value="regular"
+                        v-model="form.seguridad[item.key]"
+                      />
+                    </div>
+                    <div class="col-2 text-center">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        :name="'seguridad-' + item.key"
+                        value="mal"
+                        v-model="form.seguridad[item.key]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row g-4 mb-3">
+                <div class="col-md-6" v-for="section in checkboxSections" :key="section.key">
+                  <div class="d-flex align-items-center mb-2 checklist__section-header">
+                    <input
+                      class="form-check-input me-2"
+                      type="checkbox"
+                      :id="section.key + '-all'"
+                      :checked="isSectionAllChecked(section)"
+                      @change="toggleSection(section, $event.target.checked)"
+                    />
+                    <label
+                      class="h6 text-uppercase text-muted mb-0 checklist__section-title"
+                      :for="section.key + '-all'"
+                    >
+                      {{ section.label }}
+                    </label>
+                  </div>
+                  <div class="checklist__section-list">
+                    <div
+                      v-for="item in section.items"
+                      :key="item.key"
+                      class="form-check checklist__check-row"
+                    >
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        :id="section.key + '-' + item.key"
+                        v-model="form[section.key][item.key]"
+                      />
+                      <label class="form-check-label" :for="section.key + '-' + item.key">
+                        {{ item.label }}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label checklist__label">Observaciones</label>
+                <textarea
+                  v-model="form.observaciones"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Cualquier anomalía o siniestro que tenga el vehículo"
+                ></textarea>
+              </div>
+
+              <hr />
+
+              <button type="button" class="btn btn-primary checklist__pdf-btn" @click="generarPDF">
+                Generar PDF
+              </button>
+              <span v-if="generando" class="checklist__pdf-status text-muted ms-2">Generando…</span>
+
+              <div class="mt-4 checklist__historial">
+                <h2 class="h6 text-uppercase text-muted mb-2">Historial de Checklists</h2>
+
+                <p v-if="!firebaseListo" class="text-muted small">
+                  El historial en la nube está desactivado: falta configurar
+                  <code>firebaseConfig</code> en el código (ver README).
+                </p>
+
+                <p v-else-if="!historial.length" class="text-muted small">
+                  Aún no hay checklists guardados.
+                </p>
+
+                <div v-else class="table-responsive">
+                  <table class="table table-sm table-hover align-middle">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Patente</th>
+                        <th>KM Actual</th>
+                        <th>Técnico</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="entry in historial" :key="entry.id">
+                        <td>{{ entry.fecha }}</td>
+                        <td>{{ entry.patente }}</td>
+                        <td>{{ entry.kmActual }}</td>
+                        <td>{{ entry.nombreTecnico }}</td>
+                        <td class="text-end">
+                          <button
+                            class="btn btn-sm btn-outline-secondary"
+                            @click="descargarDesdeHistorial(entry)"
+                          >
+                            Descargar PDF
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const form = reactive(crearEstadoInicial());
+        const checkboxSections = SECCIONES;
+        const seguridadItems = SEGURIDAD_ITEMS;
+        const generando = ref(false);
+        const historial = ref([]);
+        const firebaseListo = firebaseListoGlobal;
+
+        // KM Próxima Mantención: valor fijo compartido (no por checklist), editable con "Actualizar"
+        const kmProximaMantencion = ref(55000);
+        const editandoKmProxima = ref(false);
+        const kmProximaEditVal = ref(kmProximaMantencion.value);
+
+        // KM y Fecha de Última Mantención: también fijos y compartidos, editables juntos
+        const kmUltimaMantencion = ref(45946);
+        const fechaUltimaMantencion = ref('2026-05-15');
+        const editandoUltimaMantencion = ref(false);
+        const kmUltimaEditVal = ref(kmUltimaMantencion.value);
+        const fechaUltimaEditVal = ref(fechaUltimaMantencion.value);
+
+        if (db) {
+          db.collection('config')
+            .doc('mantencion')
+            .onSnapshot(
+              (doc) => {
+                if (!doc.exists) return;
+                const data = doc.data();
+                if (typeof data.kmProximaMantencion === 'number') {
+                  kmProximaMantencion.value = data.kmProximaMantencion;
+                }
+                if (typeof data.kmUltimaMantencion === 'number') {
+                  kmUltimaMantencion.value = data.kmUltimaMantencion;
+                }
+                if (typeof data.fechaUltimaMantencion === 'string') {
+                  fechaUltimaMantencion.value = data.fechaUltimaMantencion;
+                }
+              },
+              (err) => console.error('Error leyendo config de mantención:', err)
+            );
+        }
+
+        function abrirEdicionKmProxima() {
+          kmProximaEditVal.value = kmProximaMantencion.value;
+          editandoKmProxima.value = true;
+        }
+
+        function guardarKmProxima() {
+          kmProximaMantencion.value = kmProximaEditVal.value;
+          editandoKmProxima.value = false;
+          if (db) {
+            db.collection('config')
+              .doc('mantencion')
+              .set({ kmProximaMantencion: kmProximaMantencion.value }, { merge: true })
+              .catch((err) => console.error('Error guardando config de mantención:', err));
+          }
+        }
+
+        function abrirEdicionUltimaMantencion() {
+          kmUltimaEditVal.value = kmUltimaMantencion.value;
+          fechaUltimaEditVal.value = fechaUltimaMantencion.value;
+          editandoUltimaMantencion.value = true;
+        }
+
+        function guardarUltimaMantencion() {
+          kmUltimaMantencion.value = kmUltimaEditVal.value;
+          fechaUltimaMantencion.value = fechaUltimaEditVal.value;
+          editandoUltimaMantencion.value = false;
+          if (db) {
+            db.collection('config')
+              .doc('mantencion')
+              .set(
+                {
+                  kmUltimaMantencion: kmUltimaMantencion.value,
+                  fechaUltimaMantencion: fechaUltimaMantencion.value,
+                },
+                { merge: true }
+              )
+              .catch((err) => console.error('Error guardando config de mantención:', err));
+          }
+        }
+
+        const alertaMantencion = computed(() => {
+          const actual = Number(form.kmActual);
+          const proxima = Number(kmProximaMantencion.value);
+          return actual > 0 && proxima > 0 && actual >= proxima;
+        });
+
+        // ---- Diagrama de daños del vehículo (4 ángulos, fijo y compartido) ----
+        const angulosVehiculo = ANGULOS_VEHICULO;
+        const imagenesDanos = reactive({
+          frente: null,
+          atras: null,
+          lateralDerecho: null,
+          lateralIzquierdo: null,
+        });
+        const editandoAngulo = ref(null);
+        const canvasRefs = {};
+        let dibujandoTrazo = false;
+
+        if (db) {
+          db.collection('config')
+            .doc('danosVehiculo')
+            .onSnapshot(
+              (doc) => {
+                if (!doc.exists) return;
+                const data = doc.data();
+                angulosVehiculo.forEach((a) => {
+                  if (a.key in data) {
+                    imagenesDanos[a.key] = typeof data[a.key] === 'string' ? data[a.key] : null;
+                  }
+                });
+              },
+              (err) => console.error('Error leyendo diagrama de daños:', err)
+            );
+        }
+
+        function setCanvasRef(key, el) {
+          if (el) canvasRefs[key] = el;
+        }
+
+        async function abrirEdicionAngulo(angulo) {
+          editandoAngulo.value = angulo.key;
+          await nextTick();
+          const canvas = canvasRefs[angulo.key];
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+          if (imagenesDanos[angulo.key]) {
+            const img = await cargarImagen(imagenesDanos[angulo.key]);
+            ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+          } else {
+            const img = await cargarImagen(svgDataUrl(angulo));
+            if (angulo.espejado) {
+              ctx.save();
+              ctx.translate(CANVAS_W, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+              ctx.restore();
+            } else {
+              ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+            }
+          }
+        }
+
+        function cancelarEdicionAngulo() {
+          editandoAngulo.value = null;
+        }
+
+        function guardarAngulo(key) {
+          const canvas = canvasRefs[key];
+          if (!canvas) return;
+          const dataUrl = canvas.toDataURL('image/png');
+          imagenesDanos[key] = dataUrl;
+          editandoAngulo.value = null;
+          if (db) {
+            db.collection('config')
+              .doc('danosVehiculo')
+              .set({ [key]: dataUrl }, { merge: true })
+              .catch((err) => console.error('Error guardando diagrama de daños:', err));
+          }
+        }
+
+        function limpiarAngulo(angulo) {
+          if (!confirm(`¿Limpiar el diagrama de "${angulo.label}"? Se perderán las marcas guardadas.`)) {
+            return;
+          }
+          imagenesDanos[angulo.key] = null;
+          if (editandoAngulo.value === angulo.key) editandoAngulo.value = null;
+          if (db) {
+            db.collection('config')
+              .doc('danosVehiculo')
+              .set({ [angulo.key]: null }, { merge: true })
+              .catch((err) => console.error('Error limpiando diagrama de daños:', err));
+          }
+        }
+
+        function coordsRelativas(e, key) {
+          const canvas = canvasRefs[key];
+          const rect = canvas.getBoundingClientRect();
+          const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+          return {
+            x: ((clientX - rect.left) * canvas.width) / rect.width,
+            y: ((clientY - rect.top) * canvas.height) / rect.height,
+          };
+        }
+
+        function iniciarTrazo(e, key) {
+          if (editandoAngulo.value !== key) return;
+          e.preventDefault();
+          dibujandoTrazo = true;
+          const { x, y } = coordsRelativas(e, key);
+          const ctx = canvasRefs[key].getContext('2d');
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+        }
+
+        function continuarTrazo(e, key) {
+          if (!dibujandoTrazo || editandoAngulo.value !== key) return;
+          e.preventDefault();
+          const { x, y } = coordsRelativas(e, key);
+          const ctx = canvasRefs[key].getContext('2d');
+          ctx.strokeStyle = '#e03131';
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+
+        function terminarTrazo() {
+          dibujandoTrazo = false;
+        }
+
+        if (db) {
+          db.collection('historialChecklists')
+            .orderBy('creadoEn', 'desc')
+            .limit(50)
+            .onSnapshot(
+              (snap) => {
+                historial.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+              },
+              (err) => console.error('Error escuchando historial:', err)
+            );
+        }
+
+        function isSectionAllChecked(section) {
+          return section.items.every((item) => form[section.key][item.key]);
+        }
+
+        function toggleSection(section, checked) {
+          section.items.forEach((item) => {
+            form[section.key][item.key] = checked;
+          });
+        }
+
+        async function crearPDFDesdeDatos(data) {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+          doc.setFontSize(14);
+          doc.text('CHECK LIST VEHÍCULOS PROVECTIS', 40, 40);
+          doc.setFontSize(9);
+          doc.text('Formato N°1', 40, 55);
+
+          doc.autoTable({
+            startY: 70,
+            theme: 'grid',
+            styles: { fontSize: 9 },
+            body: [
+              ['Nombre Técnico de turno', data.nombreTecnico, 'Ciudad', data.ciudad],
+              ['Fecha', formatearFecha(data.fecha), 'Proyecto', data.proyecto],
+              ['Patente', data.patente, 'KM Próxima Mantención', data.kmProximaMantencion],
+              ['KM Actual', data.kmActual, 'KM Última Mantención', data.kmUltimaMantencion],
+              ['Fecha Última Mantención', formatearFecha(data.fechaUltimaMantencion), '', ''],
+            ],
+          });
+
+          let cursorY = doc.lastAutoTable.finalY + 24;
+
+          // ---- Diagrama de daños del vehículo (2x2) ----
+          doc.setFontSize(10);
+          doc.text('Estado del Vehículo (marcas de daños)', 40, cursorY);
+          cursorY += 10;
+
+          const imgW = 240;
+          const imgH = 144;
+          const gap = 15;
+          const posiciones = [
+            { x: 40, y: cursorY },
+            { x: 40 + imgW + gap, y: cursorY },
+            { x: 40, y: cursorY + imgH + 18 },
+            { x: 40 + imgW + gap, y: cursorY + imgH + 18 },
+          ];
+
+          for (let i = 0; i < angulosVehiculo.length; i++) {
+            const angulo = angulosVehiculo[i];
+            const pos = posiciones[i];
+            const guardada = data.imagenesDanos && data.imagenesDanos[angulo.key];
+            const imgData = guardada || (await svgToPngDataUrl(angulo));
+            doc.setFontSize(8);
+            doc.text(angulo.label, pos.x, pos.y - 3);
+            doc.addImage(imgData, 'PNG', pos.x, pos.y, imgW, imgH);
+          }
+
+          cursorY = posiciones[2].y + imgH + 24;
+
+          const ESTADO_LABEL = { buen: 'Buen Estado', regular: 'Regular', mal: 'Mal Estado' };
+
+          if (cursorY > 700) {
+            doc.addPage();
+            cursorY = 40;
+          }
+          doc.setFontSize(10);
+          doc.text('Seguridad del Vehículo', 40, cursorY);
+          doc.autoTable({
+            startY: cursorY + 8,
+            theme: 'grid',
+            styles: { fontSize: 9 },
+            head: [['Ítem', 'Estado']],
+            body: seguridadItems.map((item) => [
+              item.label,
+              ESTADO_LABEL[data.seguridad[item.key]] || '-',
+            ]),
+            margin: { left: 40, right: 40 },
+          });
+          cursorY = doc.lastAutoTable.finalY + 20;
+
+          checkboxSections.forEach((section) => {
+            if (cursorY > 720) {
+              doc.addPage();
+              cursorY = 40;
+            }
+            doc.setFontSize(10);
+            doc.text(section.label, 40, cursorY);
+
+            const body = section.items.map((item) => [
+              item.label,
+              data[section.key][item.key] ? 'Sí' : 'No',
+            ]);
+
+            doc.autoTable({
+              startY: cursorY + 8,
+              theme: 'grid',
+              styles: { fontSize: 9 },
+              head: [['Ítem', 'Sí/No']],
+              body,
+              margin: { left: 40, right: 40 },
+            });
+
+            cursorY = doc.lastAutoTable.finalY + 20;
+          });
+
+          if (cursorY > 680) {
+            doc.addPage();
+            cursorY = 40;
+          }
+          doc.setFontSize(10);
+          doc.text('Observaciones', 40, cursorY);
+          doc.setFontSize(9);
+          doc.text(doc.splitTextToSize(data.observaciones || '-', 500), 40, cursorY + 16);
+
+          cursorY += 70;
+          if (cursorY > 750) {
+            doc.addPage();
+            cursorY = 40;
+          }
+          doc.setFontSize(9);
+          doc.text(`Nombre y Firma Técnico: ${data.nombreTecnico}`, 40, cursorY);
+
+          return doc;
+        }
+
+        function guardarHistorial(nombreArchivo) {
+          if (!db) return;
+          const snapshot = JSON.parse(JSON.stringify(form));
+          db.collection('historialChecklists')
+            .add({
+              ...snapshot,
+              kmProximaMantencion: kmProximaMantencion.value,
+              kmUltimaMantencion: kmUltimaMantencion.value,
+              fechaUltimaMantencion: fechaUltimaMantencion.value,
+              imagenesDanos: JSON.parse(JSON.stringify(imagenesDanos)),
+              archivo: nombreArchivo,
+              creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+            })
+            .catch((err) => console.error('Error guardando historial:', err));
+        }
+
+        async function generarPDF() {
+          generando.value = true;
+          try {
+            const doc = await crearPDFDesdeDatos({
+              ...form,
+              kmProximaMantencion: kmProximaMantencion.value,
+              kmUltimaMantencion: kmUltimaMantencion.value,
+              fechaUltimaMantencion: fechaUltimaMantencion.value,
+              imagenesDanos,
+            });
+            const nombreArchivo = `checklist_${form.patente}_${form.fecha}.pdf`;
+            doc.save(nombreArchivo);
+            guardarHistorial(nombreArchivo);
+          } finally {
+            generando.value = false;
+          }
+        }
+
+        async function descargarDesdeHistorial(entry) {
+          const doc = await crearPDFDesdeDatos(entry);
+          doc.save(entry.archivo || `checklist_${entry.patente}_${entry.fecha}.pdf`);
+        }
+
+        return {
+          form,
+          checkboxSections,
+          seguridadItems,
+          generando,
+          generarPDF,
+          isSectionAllChecked,
+          toggleSection,
+          alertaMantencion,
+          historial,
+          firebaseListo,
+          descargarDesdeHistorial,
+          kmProximaMantencion,
+          editandoKmProxima,
+          kmProximaEditVal,
+          abrirEdicionKmProxima,
+          guardarKmProxima,
+          kmUltimaMantencion,
+          fechaUltimaMantencion,
+          editandoUltimaMantencion,
+          kmUltimaEditVal,
+          fechaUltimaEditVal,
+          abrirEdicionUltimaMantencion,
+          guardarUltimaMantencion,
+          angulosVehiculo,
+          imagenesDanos,
+          editandoAngulo,
+          setCanvasRef,
+          abrirEdicionAngulo,
+          cancelarEdicionAngulo,
+          guardarAngulo,
+          limpiarAngulo,
+          iniciarTrazo,
+          continuarTrazo,
+          terminarTrazo,
+          svgDataUrl,
+          formatearFecha,
+        };
+      },
+    };
+
+    /* =========================================================
+       VISTA 2: GENERADOR DE PLANTILLAS (Vicente)
+       ========================================================= */
+
+    function sugerirNombreCorto(nombreCompleto) {
+      const conectores = ['del', 'de', 'la', 'los', 'las', 'y'];
+      const partes = nombreCompleto.trim().split(/\s+/).filter(Boolean);
+      if (partes.length < 2) return nombreCompleto.trim();
+
+      const primerNombre = partes[0];
+      let apellido = partes[partes.length - 1];
+      for (let i = partes.length - 1; i > 0; i--) {
+        if (!conectores.includes(partes[i].toLowerCase())) {
+          apellido = partes[i];
+          break;
+        }
+      }
+      return `${primerNombre} ${apellido}`;
+    }
+
+    function fechaHoyDDMMAAAA() {
+      const d = new Date();
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const aaaa = d.getFullYear();
+      return `${dd}/${mm}/${aaaa}`;
+    }
+
+    const TEMPLATE_CONFIG = [
+      {
+        id: 'asignar-equipo',
+        label: 'Asignar equipo',
+        explicacion: 'Como primer paso se envía un correo con los datos del usuario para que el encargado de inventario asigne un equipo disponible en bodega.',
+        documentoGenera: 'Equipo disponible para asignar',
+        itemColumns: [
+          { key: 'tipo', label: 'Tipo de equipo' },
+          { key: 'modelo', label: 'Modelo' },
+        ],
+        extraFields: [
+          { key: 'nombreCompleto', label: 'Nombre completo', type: 'text' },
+          { key: 'nombreCorto', label: 'Nombre corto (asunto/saludo)', type: 'text' },
+          { key: 'ubicacion', label: 'Ubicación', type: 'text' },
+          { key: 'segmento', label: 'Segmento', type: 'text' },
+          { key: 'ticket', label: 'Ticket de referencia (URL)', type: 'text' },
+        ],
+        generate(state) {
+          const items = state.items
+            .map((i) => `${i.tipo}:\t${i.modelo}`)
+            .join('\n\n');
+
+          return `ASUNTO: SOLICITUD ASIGNACION – ${(state.nombreCorto || '').toUpperCase()}
+
+Estimado Vicente
+
+Favor su gestión para asignar los siguientes equipos disponibles en bodega para ${state.nombreCorto}:
+
+${items}
+
+Asignado a:\t${state.nombreCompleto}
+Ubicación:\t${state.ubicacion}
+Segmento:\t${state.segmento}
+
+Ticket de referencia: ${state.ticket}`;
+        },
+      },
+      {
+        id: 'abm-asignacion',
+        label: 'ABM de asignación',
+        explicacion: 'Una vez asignado el equipo, se solicita generar el ABM de asignación para dejar el registro formal a nombre del usuario.',
+        documentoGenera: 'ABM de asignación registrado',
+        itemColumns: [],
+        extraFields: [
+          { key: 'item', label: 'Item a asignar (ej: kit nuevo completo)', type: 'text' },
+          { key: 'nombre', label: 'Nombre usuario', type: 'text' },
+          { key: 'ubicacion', label: 'Ubicación (comuna)', type: 'text' },
+          { key: 'segmento', label: 'Segmento (empresa)', type: 'text' },
+          { key: 'ticket', label: 'Ticket de referencia (URL)', type: 'text' },
+          { key: 'fecha', label: 'Fecha (dd/mm/yyyy)', type: 'text' },
+        ],
+        generate(state) {
+          return `Asunto: ABM DE ASIGNACION – ${state.nombre} ${state.fecha}
+
+Estimado Vicente
+
+Favor su gestión para generar el ABM de asignación de: ${state.item}
+
+Asignado a:\t${state.nombre}
+Ubicación:\t${state.ubicacion}
+Segmento:\t${state.segmento}
+
+Ticket de referencia: ${state.ticket}`;
+        },
+      },
+      {
+        id: 'guia-despacho',
+        label: 'Guía de despacho',
+        explicacion: 'Cuando un equipo debe trasladarse entre ubicaciones u oficinas, se solicita la generación de una guía de despacho (GDD).',
+        documentoGenera: 'Guía de despacho (GDD)',
+        itemColumns: [
+          { key: 'equipo', label: 'Equipo' },
+          { key: 'modelo', label: 'Modelo' },
+          { key: 'numeroSerie', label: 'N° Serie' },
+        ],
+        extraFields: [
+          { key: 'ubicacion1', label: 'Ubicación 1 (origen)', type: 'text' },
+          { key: 'ubicacion2', label: 'Ubicación 2 (destino)', type: 'text' },
+          { key: 'fecha', label: 'Fecha (dd/mm/yyyy)', type: 'text' },
+          { key: 'destino', label: 'Oficina o edificio destino', type: 'text' },
+        ],
+        generate(state) {
+          const items = state.items
+            .map((i) => `${i.equipo} ${i.modelo} S/N ${i.numeroSerie}`)
+            .join('\n');
+
+          return `ASUNTO: GDD - ${state.ubicacion1} - ${state.ubicacion2} ${state.fecha}
+
+Estimado Vicente:
+
+Favor tu apoyo para generar GDD para trasladar los sgtes activos hacia ${state.destino}
+
+${items}`;
+        },
+      },
+      {
+        id: 'retirar-equipo',
+        label: 'Retirar equipo',
+        explicacion: 'Al finalizar el uso o el contrato del usuario, se solicita retirar y desasignar el equipo asociado a su nombre.',
+        documentoGenera: 'Equipo retirado y desasignado',
+        itemColumns: [
+          { key: 'tipo', label: 'Tipo de equipo' },
+          { key: 'modelo', label: 'Modelo' },
+          { key: 'numeroSerie', label: 'N° Serie' },
+          { key: 'accesorios', label: 'Accesorios (opcional)' },
+        ],
+        extraFields: [
+          { key: 'nombreCompleto', label: 'Nombre completo', type: 'text' },
+          { key: 'empresa', label: 'Empresa', type: 'text' },
+          { key: 'ubicacion', label: 'Ubicación', type: 'text' },
+          { key: 'motivo', label: 'Motivo', type: 'text' },
+        ],
+        generate(state) {
+          const items = state.items
+            .map((i) => {
+              const accesorios = i.accesorios ? ` (${i.accesorios})` : '';
+              return `${i.tipo}:\t${i.modelo}\tS/N: ${i.numeroSerie}${accesorios}`;
+            })
+            .join('\n\n');
+
+          return `Asunto: ABM Retiro - ${state.nombreCompleto}
+
+Estimado Vicente
+
+Favor su apoyo para desasignar el siguiente activo del sgte usuario:
+
+Asignado a:\t${state.nombreCompleto}
+Empresa:\t${state.empresa}
+Ubicación:\t${state.ubicacion}
+
+${items}
+Motivo:\t${state.motivo}`;
+        },
+      },
+      {
+        id: 'borrado-seguro',
+        label: 'Borrado Seguro',
+        explicacion: 'Antes de reasignar un equipo retirado, se solicita autorización para el borrado seguro de datos y software.',
+        documentoGenera: 'Autorización de borrado seguro',
+        itemColumns: [
+          { key: 'modelo', label: 'Equipo (ej: DELL Latitude 5420)' },
+          { key: 'numeroSerie', label: 'N° Serie (ST)' },
+        ],
+        extraFields: [],
+        generate(state) {
+          const items = state.items
+            .map((i) => `${i.modelo}\nST: ${i.numeroSerie}`)
+            .join('\n\n');
+
+          return `Asunto: Borrado de datos notebook
+
+Buenas tardes. Junto con saludar, agradeceré su autorización para proceder con el borrado de softwares y datos de equipo retirado:
+
+${items}`;
+        },
+      },
+      {
+        id: 'desasignacion-equipo',
+        label: 'Desasignación de equipo / Retiro de equipos',
+        explicacion: 'Cuando se retira o reemplaza un equipo asignado a un usuario (ej. cambio de escáner, notebook, etc.), se solicita la desasignación formal del activo.',
+        documentoGenera: 'Desasignación / retiro de equipo registrado',
+        itemColumns: [
+          { key: 'equipo', label: 'Equipo (ej: Escáner)' },
+          { key: 'modelo', label: 'Modelo' },
+          { key: 'numeroSerie', label: 'N° Serie' },
+          { key: 'accesorios', label: 'Accesorios (opcional)' },
+        ],
+        extraFields: [
+          { key: 'nombreCompleto', label: 'Asignado a (nombre completo)', type: 'text' },
+          { key: 'empresa', label: 'Empresa', type: 'text' },
+          { key: 'ubicacion', label: 'Ubicación', type: 'text' },
+          { key: 'motivo', label: 'Motivo (ej: Reemplazo de escáner a Nombre Apellido)', type: 'text' },
+        ],
+        generate(state) {
+          const items = state.items
+            .map((i) => {
+              const accesorios = i.accesorios ? ` (${i.accesorios})` : '';
+              return `${i.equipo}:\t${i.modelo}\tS/N: ${i.numeroSerie}${accesorios}`;
+            })
+            .join('\n\n');
+
+          return `Estimado Vicente
+
+Favor su apoyo para desasignar el siguiente activo del sgte usuario:
+
+Asignado a:\t${state.nombreCompleto}
+Empresa:\t${state.empresa}
+Ubicación:\t${state.ubicacion}
+
+${items}
+Motivo:\t${state.motivo}`;
+        },
+      },
+    ];
+
+    function createEmptyState(template) {
+      const state = { items: [], _nombreCortoEditado: false };
+      template.extraFields.forEach((f) => {
+        state[f.key] = f.key === 'fecha' ? fechaHoyDDMMAAAA() : '';
+      });
+      return state;
+    }
+
+    const GeneradorPlantillas = {
+      template: `
+        <div v-if="view === 'home'" class="portada">
+          <h1 class="portada__title h3 mb-2">Proceso de gestión de equipos</h1>
+          <p class="portada__subtitle text-muted mb-4">
+            Estas son las etapas del proceso. Cada una genera un correo para Vicente.
+          </p>
+
+          <div class="row row-cols-1 row-cols-md-2 g-3">
+            <div v-for="tpl in templates" :key="tpl.id" class="col">
+              <div class="card shadow-sm h-100 portada__card">
+                <div class="card-body d-flex flex-column">
+                  <h2 class="portada__card-title h5">{{ tpl.label }}</h2>
+                  <p class="portada__card-text text-muted flex-grow-1">{{ tpl.explicacion }}</p>
+                  <p class="portada__card-doc mb-3">
+                    <strong>Genera:</strong> {{ tpl.documentoGenera }}
+                  </p>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm mt-auto align-self-start"
+                    @click="goToTemplate(tpl.id)"
+                  >
+                    Usar esta plantilla
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="planilla">
+        <div class="card shadow-sm planilla__card">
+          <div class="card-body">
+            <button type="button" class="btn btn-link btn-sm px-0 mb-2 planilla__back-btn" @click="view = 'home'">
+              ← Volver a la portada
+            </button>
+            <h1 class="planilla__title h4 mb-4">Generador de Plantillas para Vicente Version Beta.</h1>
+
+            <div v-if="selectedId === 'guia-despacho'" class="alert alert-info planilla__info" role="alert">
+              Para solicitar traslado, se debe enviar correo a la mesa de ayuda
+              <strong>servicedesk@chilquintas.cl</strong> a vicentet. Con copia a Jose, Joel y Felipe.
+              Además el asunto debe seguir este formato: <strong>"GDD - Origen - Destino Fecha"</strong>.
+              Sin nada más en el asunto.
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label planilla__label">Tipo de solicitud</label>
+              <select v-model="selectedId" class="form-select planilla__select">
+                <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">
+                  {{ tpl.label }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="currentTemplate.itemColumns.length" class="planilla__items mb-3">
+              <label class="form-label planilla__label">Listado de equipos</label>
+
+              <div
+                v-for="(item, index) in formState.items"
+                :key="index"
+                class="planilla__item-row row g-2 mb-2 align-items-center"
+              >
+                <div v-for="col in currentTemplate.itemColumns" :key="col.key" class="col">
+                  <input
+                    v-model="item[col.key]"
+                    type="text"
+                    class="form-control form-control-sm"
+                    :placeholder="col.label"
+                  />
+                </div>
+                <div class="col-auto">
+                  <button type="button" class="btn btn-outline-danger btn-sm" @click="removeItem(index)">
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <button type="button" class="btn btn-outline-secondary btn-sm" @click="addItem">
+                + Agregar equipo
+              </button>
+            </div>
+
+            <div v-for="field in currentTemplate.extraFields" :key="field.key" class="mb-3">
+              <label class="form-label planilla__label">{{ field.label }}</label>
+              <textarea
+                v-if="field.type === 'textarea'"
+                v-model="formState[field.key]"
+                class="form-control planilla__input"
+                rows="3"
+              ></textarea>
+              <input
+                v-else
+                v-model="formState[field.key]"
+                @input="onFieldInput(field.key)"
+                type="text"
+                class="form-control planilla__input"
+              />
+            </div>
+
+            <hr />
+
+            <div class="mb-2">
+              <label class="form-label planilla__label">Correo generado</label>
+              <textarea
+                class="form-control planilla__output"
+                rows="12"
+                readonly
+                :value="generatedText"
+              ></textarea>
+            </div>
+
+            <button type="button" class="btn btn-primary planilla__copy-btn" @click="copyToClipboard">
+              {{ copied ? '¡Copiado!' : 'Copiar al portapapeles' }}
+            </button>
+          </div>
+        </div>
+        </div>
+      `,
+      setup() {
+        const templates = TEMPLATE_CONFIG;
+        const selectedId = ref(templates[0].id);
+        const currentTemplate = computed(() =>
+          templates.find((t) => t.id === selectedId.value)
+        );
+
+        const view = ref('home');
+        const formState = reactive(createEmptyState(currentTemplate.value));
+        const copied = ref(false);
+
+        function goToTemplate(id) {
+          selectedId.value = id;
+          view.value = 'generador';
+        }
+
+        watch(selectedId, (newId) => {
+          const tpl = templates.find((t) => t.id === newId);
+          Object.keys(formState).forEach((k) => delete formState[k]);
+          Object.assign(formState, createEmptyState(tpl));
+          copied.value = false;
+        });
+
+        watch(
+          () => formState.nombreCompleto,
+          (newVal) => {
+            if (newVal !== undefined && !formState._nombreCortoEditado) {
+              formState.nombreCorto = sugerirNombreCorto(newVal || '');
+            }
+          }
+        );
+
+        function onFieldInput(fieldKey) {
+          if (fieldKey === 'nombreCorto') {
+            formState._nombreCortoEditado = true;
+          }
+        }
+
+        function addItem() {
+          const emptyRow = {};
+          currentTemplate.value.itemColumns.forEach((c) => (emptyRow[c.key] = ''));
+          formState.items.push(emptyRow);
+        }
+
+        function removeItem(index) {
+          formState.items.splice(index, 1);
+        }
+
+        const generatedText = computed(() => currentTemplate.value.generate(formState));
+
+        async function copyToClipboard() {
+          await navigator.clipboard.writeText(generatedText.value);
+          copied.value = true;
+          setTimeout(() => (copied.value = false), 2000);
+        }
+
+        return {
+          templates,
+          selectedId,
+          currentTemplate,
+          view,
+          goToTemplate,
+          formState,
+          copied,
+          addItem,
+          removeItem,
+          onFieldInput,
+          generatedText,
+          copyToClipboard,
+        };
+      },
+    };
+
+    /* =========================================================
+       ROUTER + APP
+       ========================================================= */
+
+    const router = VueRouter.createRouter({
+      history: VueRouter.createWebHashHistory(),
+      routes: [
+        { path: '/', component: ChecklistVehiculo },
+        { path: '/plantillas', component: GeneradorPlantillas },
+      ],
+    });
+
+    createApp({}).use(router).mount('#app');
+  </script>
+
+  <style>
+    .app-nav__container {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .app-nav__brand {
+      font-weight: 700;
+    }
+    .app-nav__links {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .app-nav__link.active {
+      font-weight: 600;
+      color: #0d6efd !important;
+    }
+
+    .checklist {
+      max-width: 900px;
+      margin: 1rem auto 2rem;
+      padding: 0 1rem;
+    }
+    .checklist__card {
+      border: none;
+    }
+    .checklist__section-list {
+      background-color: #f8f9fa;
+      border-radius: 0.375rem;
+      padding: 0.75rem 1rem;
+    }
+    .checklist__section-header label {
+      cursor: pointer;
+    }
+    .checklist__check-row {
+      padding: 0.15rem 0;
+    }
+    .checklist__section-list--radio .checklist__check-row {
+      border-top: 1px solid #e9ecef;
+      padding: 0.4rem 0;
+    }
+    .checklist__radio-header {
+      font-weight: 600;
+    }
+    .checklist__pdf-btn {
+      min-width: 160px;
+    }
+    .checklist__alerta-km {
+      font-size: 0.95rem;
+    }
+    .checklist__km-proxima {
+      padding: 0.375rem 0;
+    }
+    .checklist__km-proxima-valor {
+      font-weight: 600;
+    }
+    .checklist__historial table {
+      font-size: 0.9rem;
+    }
+    .checklist__danos-cell {
+      background-color: #f8f9fa;
+      border-radius: 0.375rem;
+      padding: 0.5rem;
+    }
+    .checklist__danos-canvas-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 300 / 180;
+      background-color: #ffffff;
+      border: 1px solid #dee2e6;
+      border-radius: 0.25rem;
+      overflow: hidden;
+    }
+    .checklist__danos-img,
+    .checklist__danos-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    .portada {
+      max-width: 960px;
+      margin: 1rem auto 2rem;
+      padding: 0 1rem;
+    }
+    .portada__card-title {
+      color: #212529;
+    }
+    .portada__card-doc {
+      font-size: 0.9rem;
+    }
+    .planilla {
+      max-width: 700px;
+      margin: 1rem auto 2rem;
+      padding: 0 1rem;
+    }
+    .planilla__card {
+      border: none;
+    }
+    .planilla__output {
+      font-family: monospace;
+      background-color: #f8f9fa;
+      white-space: pre;
+    }
+    .planilla__copy-btn {
+      min-width: 180px;
+    }
+  </style>
+
+</body>
+</html>

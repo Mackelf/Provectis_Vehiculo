@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "checklist-vehiculo-provectis"
+  },
+  "targets": {
+    "checklist-vehiculo-provectis": {
+      "hosting": {
+        "principal": [
+          "checklist-vehiculo-provectis"
+        ],
+        "nuevo": [
+          "formularios-provectis"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
