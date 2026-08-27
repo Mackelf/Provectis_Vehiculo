@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Solo estos 2 UID (mario.canto2008@gmail.com e imgtest90@gmail.com)
+    // pueden editar la lista de usuarios autorizados.
+    match /config/usuariosAutorizados {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        request.auth.uid in [
+          'ZisnSlIMFUNSdU7l40ag3ojU6Sz2',
+          'F7Mw1lVgydMvRDi0SqCqJnOI63h2'
+        ];
+    }
+
+    // Resto de la configuración compartida (mantención, daños del vehículo, técnicos):
+    // cualquier usuario logueado puede leer y escribir.
+    match /config/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && doc != 'usuariosAutorizados';
+    }
+
+    // Historiales y casos: cualquier usuario logueado puede leer y escribir
+    // (la app ya oculta/restringe Editar y Borrar a nivel de interfaz según el rol).
+    match /historialChecklists/{doc} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /historialEquipos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /seguimientoCasos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
