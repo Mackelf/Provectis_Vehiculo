@@ -791,6 +791,10 @@
 
               <hr />
 
+              <div v-if="errorValidacion" class="alert alert-warning py-2" role="alert">
+                ⚠️ {{ errorValidacion }}
+              </div>
+
               <button type="button" class="btn btn-primary checklist__pdf-btn" @click="generarPDF">
                 Generar PDF
               </button>
@@ -913,6 +917,7 @@
         const firebaseListo = firebaseListoGlobal;
         const esAdmin = computed(() => AUTH.rol === 'admin');
         const esAdminRaiz = computed(() => ADMINS_RAIZ.includes(AUTH.usuario && AUTH.usuario.email));
+        const errorValidacion = ref('');
         const nuevoUsuarioEmail = ref('');
         const nuevoUsuarioRol = ref('tecnico');
 
@@ -1273,6 +1278,15 @@
         }
 
         async function generarPDF() {
+          errorValidacion.value = '';
+          if (!form.nombreTecnico) {
+            errorValidacion.value = 'Selecciona el Nombre Técnico de turno antes de generar el PDF.';
+            return;
+          }
+          if (!form.kmActual) {
+            errorValidacion.value = 'Ingresa el KM Actual antes de generar el PDF.';
+            return;
+          }
           generando.value = true;
           try {
             const doc = await crearPDFDesdeDatos({
@@ -1324,6 +1338,7 @@
           nuevoUsuarioRol,
           agregarNuevoUsuario,
           quitarUsuarioAutorizado,
+          errorValidacion,
           descargarDesdeHistorial,
           borrarDelHistorial,
           kmProximaMantencion,
