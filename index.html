@@ -857,7 +857,7 @@
                   Registro de Cargas de Combustible
                 </h2>
                 <p class="text-muted small mb-3">
-                  Registra cada carga para llevar el control de kilómetros recorridos y rendimiento.
+                  Registra cada carga para llevar el control de kilómetros recorridos entre cargas.
                 </p>
 
                 <div v-if="cargaIdActual" class="alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3" role="alert">
@@ -937,7 +937,6 @@
                           <th>Litros</th>
                           <th>Precio Unit.</th>
                           <th>Total</th>
-                          <th>Rendimiento</th>
                           <th>Técnico</th>
                           <th></th>
                         </tr>
@@ -950,7 +949,6 @@
                           <td>{{ entry.litros }}</td>
                           <td>\${{ entry.precioUnitario }}</td>
                           <td>\${{ entry.total }}</td>
-                          <td>{{ rendimientoDe(entry) }}</td>
                           <td>{{ entry.tecnico }}</td>
                           <td class="text-end">
                             <button
@@ -1086,13 +1084,6 @@
           if (!anterior || !actual || actual <= anterior) return null;
           return actual - anterior;
         });
-
-        function rendimientoDe(entry) {
-          const km = entry.odometroActual - entry.odometroAnterior;
-          const litros = parseNumeroDecimal(entry.litros);
-          if (!km || !litros) return '—';
-          return (km / litros).toFixed(1) + ' km/L';
-        }
 
         if (db) {
           db.collection('cargasCombustible')
@@ -1609,7 +1600,6 @@
           historialCombustible,
           errorValidacionCombustible,
           kmRecorridosCarga,
-          rendimientoDe,
           guardarCarga,
           borrarCarga,
           cargaIdActual,
