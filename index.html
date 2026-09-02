@@ -1096,7 +1096,7 @@
 
         if (db) {
           db.collection('cargasCombustible')
-            .orderBy('creadoEn', 'desc')
+            .orderBy('fecha', 'desc')
             .limit(50)
             .onSnapshot(
               (snap) => {
