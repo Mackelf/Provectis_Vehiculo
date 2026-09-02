@@ -860,6 +860,13 @@
                   Registra cada carga para llevar el control de kilómetros recorridos y rendimiento.
                 </p>
 
+                <div v-if="cargaIdActual" class="alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3" role="alert">
+                  <span>✏️ Editando carga guardada</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelarEdicionCarga">
+                    Cancelar edición / Nueva carga
+                  </button>
+                </div>
+
                 <div class="row g-3 mb-2">
                   <div class="col-md-3">
                     <label class="form-label checklist__label">Fecha</label>
@@ -881,7 +888,13 @@
                   </div>
                   <div class="col-md-3">
                     <label class="form-label checklist__label">Litros Cargados</label>
-                    <input v-model.number="cargaForm.litros" type="number" step="0.001" class="form-control" />
+                    <input
+                      v-model="cargaForm.litros"
+                      type="text"
+                      inputmode="decimal"
+                      placeholder="Ej: 28,389"
+                      class="form-control"
+                    />
                   </div>
                   <div class="col-md-3">
                     <label class="form-label checklist__label">Precio Unitario</label>
@@ -940,6 +953,13 @@
                           <td>{{ rendimientoDe(entry) }}</td>
                           <td>{{ entry.tecnico }}</td>
                           <td class="text-end">
+                            <button
+                              v-if="esAdmin"
+                              class="btn btn-sm btn-outline-primary me-1"
+                              @click="cargarCarga(entry)"
+                            >
+                              Editar
+                            </button>
                             <button
                               v-if="esAdmin"
                               class="btn btn-sm btn-outline-danger"
@@ -1046,6 +1066,15 @@
           };
         }
 
+        // Acepta tanto "28.389" como "28,389" (formato chileno) y lo convierte a número real.
+        function parseNumeroDecimal(valor) {
+          if (typeof valor === 'number') return valor;
+          if (!valor) return NaN;
+          return parseFloat(String(valor).replace(',', '.'));
+        }
+
+        const cargaIdActual = ref(null);
+
         const cargaForm = reactive(crearCargaVacia(''));
         const guardandoCombustible = ref(false);
         const historialCombustible = ref([]);
@@ -1060,7 +1089,7 @@
 
         function rendimientoDe(entry) {
           const km = entry.odometroActual - entry.odometroAnterior;
-          const litros = Number(entry.litros);
+          const litros = parseNumeroDecimal(entry.litros);
           if (!km || !litros) return '—';
           return (km / litros).toFixed(1) + ' km/L';
         }
@@ -1073,7 +1102,8 @@
               (snap) => {
                 historialCombustible.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
                 // Sugiere el odómetro anterior automáticamente con la última carga registrada
-                if (!cargaForm.odometroAnterior && historialCombustible.value[0]) {
+                // (solo si no se está editando una carga existente)
+                if (!cargaIdActual.value && !cargaForm.odometroAnterior && historialCombustible.value[0]) {
                   cargaForm.odometroAnterior = historialCombustible.value[0].odometroActual;
                 }
               },
@@ -1081,12 +1111,32 @@
             );
         }
 
+        function cargarCarga(entry) {
+          Object.keys(cargaForm).forEach((k) => delete cargaForm[k]);
+          Object.assign(cargaForm, crearCargaVacia(''));
+          Object.keys(cargaForm).forEach((k) => {
+            if (k in entry) cargaForm[k] = entry[k];
+          });
+          cargaIdActual.value = entry.id;
+          errorValidacionCombustible.value = '';
+        }
+
+        function cancelarEdicionCarga() {
+          const ultimoOdometro = historialCombustible.value[0] ? historialCombustible.value[0].odometroActual : '';
+          Object.keys(cargaForm).forEach((k) => delete cargaForm[k]);
+          Object.assign(cargaForm, crearCargaVacia(ultimoOdometro));
+          cargaIdActual.value = null;
+          errorValidacionCombustible.value = '';
+        }
+
         function guardarCarga() {
           errorValidacionCombustible.value = '';
+          const litrosNum = parseNumeroDecimal(cargaForm.litros);
           if (
             !cargaForm.fecha ||
             !cargaForm.odometroActual ||
             !cargaForm.litros ||
+            Number.isNaN(litrosNum) ||
             !cargaForm.precioUnitario ||
             !cargaForm.total
           ) {
@@ -1097,16 +1147,31 @@
           if (!db) return;
           guardandoCombustible.value = true;
           const snapshot = JSON.parse(JSON.stringify(cargaForm));
-          db.collection('cargasCombustible')
-            .add({
-              ...snapshot,
-              patente: form.patente,
-              creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
-            })
+          const datos = {
+            ...snapshot,
+            litros: litrosNum,
+            patente: form.patente,
+          };
+
+          const promesa = cargaIdActual.value
+            ? db
+                .collection('cargasCombustible')
+                .doc(cargaIdActual.value)
+                .set(
+                  { ...datos, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() },
+                  { merge: true }
+                )
+            : db.collection('cargasCombustible').add({
+                ...datos,
+                creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+              });
+
+          promesa
             .then(() => {
               const ultimoOdometro = cargaForm.odometroActual;
               Object.keys(cargaForm).forEach((k) => delete cargaForm[k]);
               Object.assign(cargaForm, crearCargaVacia(ultimoOdometro));
+              cargaIdActual.value = null;
             })
             .catch((err) => console.error('Error guardando carga de combustible:', err))
             .finally(() => {
@@ -1122,6 +1187,9 @@
           db.collection('cargasCombustible')
             .doc(entry.id)
             .delete()
+            .then(() => {
+              if (cargaIdActual.value === entry.id) cancelarEdicionCarga();
+            })
             .catch((err) => console.error('Error borrando carga de combustible:', err));
         }
 
@@ -1544,6 +1612,9 @@
           rendimientoDe,
           guardarCarga,
           borrarCarga,
+          cargaIdActual,
+          cargarCarga,
+          cancelarEdicionCarga,
           descargarDesdeHistorial,
           borrarDelHistorial,
           kmProximaMantencion,
