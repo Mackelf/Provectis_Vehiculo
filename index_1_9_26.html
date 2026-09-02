@@ -850,111 +850,6 @@
                 </div>
               </div>
 
-              <hr class="mt-4" />
-
-              <div class="checklist__combustible">
-                <h2 class="checklist__section-title h6 text-uppercase text-muted mb-2">
-                  Registro de Cargas de Combustible
-                </h2>
-                <p class="text-muted small mb-3">
-                  Registra cada carga para llevar el control de kilómetros recorridos y rendimiento.
-                </p>
-
-                <div class="row g-3 mb-2">
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Fecha</label>
-                    <input v-model="cargaForm.fecha" type="date" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Odómetro Anterior</label>
-                    <input v-model.number="cargaForm.odometroAnterior" type="number" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Odómetro Actual</label>
-                    <input v-model.number="cargaForm.odometroActual" type="number" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label d-block">Km Recorridos</label>
-                    <span class="checklist__km-proxima-valor">
-                      {{ kmRecorridosCarga !== null ? kmRecorridosCarga.toLocaleString('es-CL') + ' km' : '—' }}
-                    </span>
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Litros Cargados</label>
-                    <input v-model.number="cargaForm.litros" type="number" step="0.001" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Precio Unitario</label>
-                    <input v-model.number="cargaForm.precioUnitario" type="number" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Total (Tarjeta Flota)</label>
-                    <input v-model.number="cargaForm.total" type="number" class="form-control" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Técnico</label>
-                    <selector-tecnico v-model="cargaForm.tecnico"></selector-tecnico>
-                  </div>
-                </div>
-
-                <div v-if="errorValidacionCombustible" class="alert alert-warning py-2" role="alert">
-                  ⚠️ {{ errorValidacionCombustible }}
-                </div>
-
-                <button type="button" class="btn btn-primary btn-sm" @click="guardarCarga">
-                  Guardar Carga
-                </button>
-                <span v-if="guardandoCombustible" class="text-muted ms-2">Guardando…</span>
-
-                <div class="mt-3">
-                  <p v-if="!firebaseListo" class="text-muted small">
-                    El historial en la nube está desactivado: falta configurar
-                    <code>firebaseConfig</code> en el código.
-                  </p>
-                  <p v-else-if="!historialCombustible.length" class="text-muted small">
-                    Aún no hay cargas registradas.
-                  </p>
-                  <div v-else class="table-responsive">
-                    <table class="table table-sm table-hover align-middle">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Odóm. Actual</th>
-                          <th>Km Recorridos</th>
-                          <th>Litros</th>
-                          <th>Precio Unit.</th>
-                          <th>Total</th>
-                          <th>Rendimiento</th>
-                          <th>Técnico</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="entry in historialCombustible" :key="entry.id">
-                          <td>{{ entry.fecha }}</td>
-                          <td>{{ entry.odometroActual }}</td>
-                          <td>{{ entry.odometroActual - entry.odometroAnterior }}</td>
-                          <td>{{ entry.litros }}</td>
-                          <td>\${{ entry.precioUnitario }}</td>
-                          <td>\${{ entry.total }}</td>
-                          <td>{{ rendimientoDe(entry) }}</td>
-                          <td>{{ entry.tecnico }}</td>
-                          <td class="text-end">
-                            <button
-                              v-if="esAdmin"
-                              class="btn btn-sm btn-outline-danger"
-                              @click="borrarCarga(entry)"
-                            >
-                              Borrar
-                            </button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
               <div v-if="esAdminRaiz" class="mt-4 checklist__usuarios-panel">
                 <h2 class="h6 text-uppercase text-muted mb-2">Gestionar Usuarios Autorizados</h2>
                 <p class="text-muted small mb-2">
@@ -1031,98 +926,6 @@
           agregarUsuarioAutorizado(nuevoUsuarioEmail.value, nuevoUsuarioRol.value);
           nuevoUsuarioEmail.value = '';
           nuevoUsuarioRol.value = 'tecnico';
-        }
-
-        // ---- Registro de Cargas de Combustible ----
-        function crearCargaVacia(odometroPrevio) {
-          return {
-            fecha: new Date().toISOString().slice(0, 10),
-            odometroAnterior: odometroPrevio || '',
-            odometroActual: '',
-            litros: '',
-            precioUnitario: '',
-            total: '',
-            tecnico: '',
-          };
-        }
-
-        const cargaForm = reactive(crearCargaVacia(''));
-        const guardandoCombustible = ref(false);
-        const historialCombustible = ref([]);
-        const errorValidacionCombustible = ref('');
-
-        const kmRecorridosCarga = computed(() => {
-          const anterior = Number(cargaForm.odometroAnterior);
-          const actual = Number(cargaForm.odometroActual);
-          if (!anterior || !actual || actual <= anterior) return null;
-          return actual - anterior;
-        });
-
-        function rendimientoDe(entry) {
-          const km = entry.odometroActual - entry.odometroAnterior;
-          const litros = Number(entry.litros);
-          if (!km || !litros) return '—';
-          return (km / litros).toFixed(1) + ' km/L';
-        }
-
-        if (db) {
-          db.collection('cargasCombustible')
-            .orderBy('creadoEn', 'desc')
-            .limit(50)
-            .onSnapshot(
-              (snap) => {
-                historialCombustible.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-                // Sugiere el odómetro anterior automáticamente con la última carga registrada
-                if (!cargaForm.odometroAnterior && historialCombustible.value[0]) {
-                  cargaForm.odometroAnterior = historialCombustible.value[0].odometroActual;
-                }
-              },
-              (err) => console.error('Error escuchando cargas de combustible:', err)
-            );
-        }
-
-        function guardarCarga() {
-          errorValidacionCombustible.value = '';
-          if (
-            !cargaForm.fecha ||
-            !cargaForm.odometroActual ||
-            !cargaForm.litros ||
-            !cargaForm.precioUnitario ||
-            !cargaForm.total
-          ) {
-            errorValidacionCombustible.value =
-              'Completa fecha, odómetro actual, litros, precio unitario y total antes de guardar.';
-            return;
-          }
-          if (!db) return;
-          guardandoCombustible.value = true;
-          const snapshot = JSON.parse(JSON.stringify(cargaForm));
-          db.collection('cargasCombustible')
-            .add({
-              ...snapshot,
-              patente: form.patente,
-              creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
-            })
-            .then(() => {
-              const ultimoOdometro = cargaForm.odometroActual;
-              Object.keys(cargaForm).forEach((k) => delete cargaForm[k]);
-              Object.assign(cargaForm, crearCargaVacia(ultimoOdometro));
-            })
-            .catch((err) => console.error('Error guardando carga de combustible:', err))
-            .finally(() => {
-              guardandoCombustible.value = false;
-            });
-        }
-
-        function borrarCarga(entry) {
-          if (!db) return;
-          if (!confirm(`¿Borrar la carga de combustible del ${entry.fecha}? Esta acción no se puede deshacer.`)) {
-            return;
-          }
-          db.collection('cargasCombustible')
-            .doc(entry.id)
-            .delete()
-            .catch((err) => console.error('Error borrando carga de combustible:', err));
         }
 
         // KM Próxima Mantención: valor fijo compartido (no por checklist), editable con "Actualizar"
@@ -1536,14 +1339,6 @@
           agregarNuevoUsuario,
           quitarUsuarioAutorizado,
           errorValidacion,
-          cargaForm,
-          guardandoCombustible,
-          historialCombustible,
-          errorValidacionCombustible,
-          kmRecorridosCarga,
-          rendimientoDe,
-          guardarCarga,
-          borrarCarga,
           descargarDesdeHistorial,
           borrarDelHistorial,
           kmProximaMantencion,
@@ -2855,9 +2650,6 @@ ${items}`;
       background-color: #f8f9fa;
       border-radius: 0.375rem;
       padding: 0.5rem;
-    }
-    .checklist__combustible table {
-      font-size: 0.85rem;
     }
     .checklist__usuarios-panel {
       background-color: #fff8f0;
