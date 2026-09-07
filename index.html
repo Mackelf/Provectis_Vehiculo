@@ -34,16 +34,19 @@
         <div class="container app-nav__container">
           <span class="navbar-brand app-nav__brand mb-0">Formularios Provectis</span>
           <div class="navbar-nav app-nav__links">
-            <router-link class="nav-link app-nav__link" to="/" active-class="active">
+            <router-link v-if="puedeVerRuta('/')" class="nav-link app-nav__link" to="/" active-class="active">
               Checklist Vehículo
             </router-link>
-            <router-link class="nav-link app-nav__link" to="/plantillas" active-class="active">
+            <router-link v-if="puedeVerRuta('/plantillas')" class="nav-link app-nav__link" to="/plantillas" active-class="active">
               Plantillas Provectis
             </router-link>
-            <router-link class="nav-link app-nav__link" to="/equipos" active-class="active">
+            <router-link v-if="puedeVerRuta('/equipos')" class="nav-link app-nav__link" to="/equipos" active-class="active">
               Checklist Equipos
             </router-link>
-            <router-link class="nav-link app-nav__link" to="/seguimiento" active-class="active">
+            <router-link v-if="puedeVerRuta('/equipos-sistemas')" class="nav-link app-nav__link" to="/equipos-sistemas" active-class="active">
+              Checklist Equipos — Sistemas
+            </router-link>
+            <router-link v-if="puedeVerRuta('/seguimiento')" class="nav-link app-nav__link" to="/seguimiento" active-class="active">
               Seguimiento
             </router-link>
           </div>
@@ -95,10 +98,27 @@
     // Son los únicos que pueden editar la lista de usuarios autorizados (ver reglas de Firestore).
     const ADMINS_RAIZ = ['mario.canto2008@gmail.com', 'imgtest90@gmail.com'];
 
+    // Rutas a las que puede entrar cada rol. `null` = todas las rutas (sin restricción).
+    const RUTAS_PERMITIDAS_POR_ROL = {
+      admin: null,
+      tecnico: null,
+      tecnico_sistemas: ['/equipos-sistemas'],
+    };
+
     const AUTH = reactive({ usuario: null, rol: null, cargando: true });
 
     // Lista de usuarios autorizados (además de los admins raíz), gestionada desde Firestore.
     const usuariosAutorizadosState = reactive({ mapa: {} });
+
+    // Si el rol actual no puede ver la ruta donde está parado, lo manda a su primera ruta permitida.
+    function redirigirSiNecesario() {
+      const permitidas = RUTAS_PERMITIDAS_POR_ROL[AUTH.rol];
+      if (!permitidas) return;
+      const actual = router.currentRoute.value.path;
+      if (!permitidas.includes(actual)) {
+        router.push(permitidas[0]);
+      }
+    }
 
     let auth = null;
     if (firebaseListoGlobal) {
@@ -117,6 +137,7 @@
             AUTH.rol = 'admin';
             AUTH.cargando = false;
             iniciarListenersGlobales();
+            redirigirSiNecesario();
             return;
           }
 
@@ -128,6 +149,7 @@
               AUTH.usuario = user;
               AUTH.rol = rol;
               iniciarListenersGlobales();
+              redirigirSiNecesario();
             } else {
               AUTH.usuario = null;
               AUTH.rol = null;
@@ -1013,6 +1035,7 @@
                     <label class="form-label checklist__label">Rol</label>
                     <select v-model="nuevoUsuarioRol" class="form-select form-select-sm">
                       <option value="tecnico">tecnico</option>
+                      <option value="tecnico_sistemas">tecnico_sistemas</option>
                       <option value="admin">admin</option>
                     </select>
                   </div>
@@ -2120,6 +2143,28 @@ ${items}`;
       return form;
     }
 
+    // Igual que crearEstadoInicialEquipo, pero cada ítem lleva además un campo
+    // "...Resp" ('S' = Sistemas, 'T' = Técnico, '' = sin asignar) para saber quién hizo la tarea.
+    function crearEstadoInicialEquipoSistemas() {
+      const form = {
+        ticket: '',
+        hostname: '',
+        fecha: new Date().toISOString().slice(0, 10),
+        modelo: '',
+        numeroSerie: '',
+        soWin: '',
+        nombreSoporte: '',
+      };
+      SECCIONES_EQUIPO.forEach((section) => {
+        form[section.key] = {};
+        section.items.forEach((item) => {
+          form[section.key][item.key] = false;
+          form[section.key][item.key + 'Resp'] = '';
+        });
+      });
+      return form;
+    }
+
     const ChecklistEquipo = {
       components: { SelectorTecnico },
       template: `
@@ -2546,6 +2591,446 @@ ${items}`;
       },
     };
 
+    const ChecklistEquipoSistemas = {
+      components: { SelectorTecnico },
+      template: `
+        <div class="checklist">
+          <div class="card shadow-sm checklist__card">
+            <div class="card-body">
+              <h1 class="checklist__title h4 mb-1">Checklist Configuración Equipos — Sistemas</h1>
+              <p class="checklist__subtitle text-muted mb-4">
+                Instalación de equipo. Marca en cada ítem quién lo realizó (S = Sistemas, T = Técnico).
+              </p>
+
+              <div class="row g-3 mb-2">
+                <div class="col-md-3">
+                  <label class="form-label checklist__label">Ticket *</label>
+                  <input
+                    v-model.number="form.ticket"
+                    @blur="buscarTicket"
+                    type="number"
+                    class="form-control"
+                    :class="{ 'is-invalid': errorValidacion }"
+                  />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">Hostname</label>
+                  <input v-model="form.hostname" type="text" class="form-control" />
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label checklist__label">Fecha</label>
+                  <input v-model="form.fecha" type="date" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">Modelo</label>
+                  <input v-model="form.modelo" type="text" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">S/N</label>
+                  <input v-model="form.numeroSerie" type="text" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">S.O / WIN</label>
+                  <input v-model="form.soWin" type="text" class="form-control" />
+                </div>
+              </div>
+
+              <div v-if="errorValidacion" class="text-danger small mb-3">{{ errorValidacion }}</div>
+
+              <div
+                v-if="ticketEncontrado"
+                class="alert alert-info d-flex justify-content-between align-items-center py-2 mb-3"
+                role="alert"
+              >
+                <span>
+                  Ya existe un checklist guardado para el ticket
+                  <strong>#{{ ticketEncontrado.ticket }}</strong> ({{ ticketEncontrado.hostname }}).
+                </span>
+                <span class="text-nowrap">
+                  <button type="button" class="btn btn-sm btn-primary me-2" @click="cargarChecklist(ticketEncontrado)">
+                    Cargar para editar
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="ticketEncontrado = null">
+                    Ignorar
+                  </button>
+                </span>
+              </div>
+
+              <div
+                v-if="modoEdicion"
+                class="alert alert-warning d-flex justify-content-between align-items-center py-2 mb-3"
+                role="alert"
+              >
+                <span>✏️ Editando checklist del ticket <strong>#{{ ticketCargado }}</strong></span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="nuevoChecklist">
+                  Cancelar edición / Nuevo checklist
+                </button>
+              </div>
+
+              <div class="mb-4" v-for="section in secciones" :key="section.key">
+                <div class="d-flex align-items-center mb-2 checklist__section-header">
+                  <input
+                    class="form-check-input me-2"
+                    type="checkbox"
+                    :id="section.key + '-all'"
+                    :checked="isSectionAllChecked(section)"
+                    @change="toggleSection(section, $event.target.checked)"
+                  />
+                  <label
+                    class="h6 text-uppercase text-muted mb-0 checklist__section-title"
+                    :for="section.key + '-all'"
+                  >
+                    {{ section.label }}
+                  </label>
+                </div>
+                <div class="checklist__section-list">
+                  <div
+                    v-for="item in section.items"
+                    :key="item.key"
+                    class="row checklist__check-row align-items-center g-2"
+                  >
+                    <div class="col-auto form-check mb-0">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        :id="section.key + '-' + item.key"
+                        v-model="form[section.key][item.key]"
+                      />
+                    </div>
+                    <div class="col">
+                      <label class="form-check-label mb-0" :for="section.key + '-' + item.key">
+                        {{ item.label }}
+                      </label>
+                    </div>
+                    <div class="col-auto">
+                      <select v-model="form[section.key][item.key + 'Resp']" class="form-select form-select-sm checklist__resp-select">
+                        <option value="">—</option>
+                        <option value="S">S</option>
+                        <option value="T">T</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label checklist__label">Nombre y Firma Soporte TI</label>
+                <selector-tecnico v-model="form.nombreSoporte"></selector-tecnico>
+              </div>
+
+              <hr />
+
+              <button
+                type="button"
+                class="btn btn-outline-primary checklist__pdf-btn me-2"
+                @click="guardarSolo"
+              >
+                Guardar
+              </button>
+              <span v-if="guardando" class="text-muted me-2">Guardando…</span>
+              <button type="button" class="btn btn-primary checklist__pdf-btn" @click="generarPDF">
+                Generar PDF
+              </button>
+              <span v-if="generando" class="checklist__pdf-status text-muted ms-2">Generando…</span>
+
+              <div class="mt-4 checklist__historial">
+                <h2 class="h6 text-uppercase text-muted mb-2">Historial de Equipos — Sistemas</h2>
+
+                <p v-if="!firebaseListo" class="text-muted small">
+                  El historial en la nube está desactivado: falta configurar
+                  <code>firebaseConfig</code> en el código (ver README).
+                </p>
+
+                <p v-else-if="!historial.length" class="text-muted small">
+                  Aún no hay checklists guardados.
+                </p>
+
+                <div v-else class="table-responsive">
+                  <table class="table table-sm table-hover align-middle">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Ticket</th>
+                        <th>Hostname</th>
+                        <th>Modelo</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="entry in historial" :key="entry.id">
+                        <td>{{ entry.fecha }}</td>
+                        <td>{{ entry.ticket }}</td>
+                        <td>{{ entry.hostname }}</td>
+                        <td>{{ entry.modelo }}</td>
+                        <td class="text-end">
+                          <button
+                            v-if="esAdmin"
+                            class="btn btn-sm btn-outline-primary me-1"
+                            @click="cargarChecklist(entry)"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            class="btn btn-sm btn-outline-secondary me-1"
+                            @click="descargarDesdeHistorial(entry)"
+                          >
+                            Descargar PDF
+                          </button>
+                          <button
+                            v-if="esAdmin"
+                            class="btn btn-sm btn-outline-danger"
+                            @click="borrarDelHistorial(entry)"
+                          >
+                            Borrar
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const route = VueRouter.useRoute();
+        const form = reactive(crearEstadoInicialEquipoSistemas());
+        if (route.query.ticket) {
+          const t = Number(route.query.ticket);
+          form.ticket = Number.isNaN(t) ? route.query.ticket : t;
+        }
+        const secciones = SECCIONES_EQUIPO;
+        const generando = ref(false);
+        const guardando = ref(false);
+        const historial = ref([]);
+        const firebaseListo = firebaseListoGlobal;
+        const esAdmin = computed(() => AUTH.rol === 'admin');
+        const errorValidacion = ref('');
+        const ticketEncontrado = ref(null);
+        const modoEdicion = ref(false);
+        const ticketCargado = ref(null);
+
+        if (db) {
+          db.collection('historialEquiposSistemas')
+            .orderBy('creadoEn', 'desc')
+            .limit(50)
+            .onSnapshot(
+              (snap) => {
+                historial.value = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+              },
+              (err) => console.error('Error escuchando historial de equipos (Sistemas):', err)
+            );
+        }
+
+        if (form.ticket) {
+          buscarTicket();
+        }
+
+        function isSectionAllChecked(section) {
+          return section.items.every((item) => form[section.key][item.key]);
+        }
+
+        function toggleSection(section, checked) {
+          section.items.forEach((item) => {
+            form[section.key][item.key] = checked;
+          });
+        }
+
+        // Si el ticket ingresado ya tiene un checklist guardado, ofrece cargarlo
+        async function buscarTicket() {
+          ticketEncontrado.value = null;
+          if (!db || !form.ticket) return;
+          if (modoEdicion.value && form.ticket === ticketCargado.value) return;
+          try {
+            const doc = await db.collection('historialEquiposSistemas').doc(String(form.ticket)).get();
+            if (doc.exists) {
+              ticketEncontrado.value = { id: doc.id, ...doc.data() };
+            }
+          } catch (err) {
+            console.error('Error buscando ticket:', err);
+          }
+        }
+
+        function cargarChecklist(entry) {
+          Object.keys(form).forEach((k) => delete form[k]);
+          Object.assign(form, JSON.parse(JSON.stringify(crearEstadoInicialEquipoSistemas())));
+          Object.keys(form).forEach((k) => {
+            if (k in entry) form[k] = entry[k];
+          });
+          modoEdicion.value = true;
+          ticketCargado.value = entry.ticket;
+          ticketEncontrado.value = null;
+        }
+
+        function nuevoChecklist() {
+          Object.keys(form).forEach((k) => delete form[k]);
+          Object.assign(form, crearEstadoInicialEquipoSistemas());
+          modoEdicion.value = false;
+          ticketCargado.value = null;
+          ticketEncontrado.value = null;
+          errorValidacion.value = '';
+        }
+
+        function crearPDFDesdeDatos(data) {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+          doc.setFontSize(14);
+          doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS — SISTEMAS', 40, 40);
+          doc.setFontSize(9);
+          doc.text(`Ticket: ${data.ticket}`, 40, 55);
+
+          doc.autoTable({
+            startY: 68,
+            theme: 'grid',
+            styles: { fontSize: 9 },
+            body: [
+              ['Hostname', data.hostname, 'Fecha', formatearFecha(data.fecha)],
+              ['Modelo', data.modelo, 'S/N', data.numeroSerie],
+              ['S.O / WIN', data.soWin, '', ''],
+            ],
+          });
+
+          let cursorY = doc.lastAutoTable.finalY + 20;
+
+          const RESP_LABEL = { S: 'Sistemas', T: 'Técnico' };
+
+          secciones.forEach((section) => {
+            if (cursorY > 700) {
+              doc.addPage();
+              cursorY = 40;
+            }
+            doc.setFontSize(10);
+            doc.text(section.label, 40, cursorY);
+
+            const body = section.items.map((item) => [
+              item.label,
+              data[section.key][item.key] ? 'Sí' : 'No',
+              RESP_LABEL[data[section.key][item.key + 'Resp']] || '-',
+            ]);
+
+            doc.autoTable({
+              startY: cursorY + 8,
+              theme: 'grid',
+              styles: { fontSize: 8 },
+              head: [['Ítem', 'Sí/No', 'Responsable']],
+              body,
+              columnStyles: { 0: { cellWidth: 380 }, 1: { cellWidth: 40 }, 2: { cellWidth: 60 } },
+              margin: { left: 40, right: 40 },
+            });
+
+            cursorY = doc.lastAutoTable.finalY + 20;
+          });
+
+          if (cursorY > 740) {
+            doc.addPage();
+            cursorY = 40;
+          }
+          doc.setFontSize(9);
+          doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte}`, 40, cursorY);
+
+          return doc;
+        }
+
+        function guardarHistorial(nombreArchivo) {
+          if (!db) return Promise.resolve();
+          const snapshot = JSON.parse(JSON.stringify(form));
+          const ref = db.collection('historialEquiposSistemas').doc(String(form.ticket));
+          const datos = {
+            ...snapshot,
+            actualizadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+          };
+          if (nombreArchivo) datos.archivo = nombreArchivo;
+          if (!modoEdicion.value) {
+            datos.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
+          }
+          return ref
+            .set(datos, { merge: true })
+            .then(() => {
+              modoEdicion.value = true;
+              ticketCargado.value = form.ticket;
+            })
+            .catch((err) => console.error('Error guardando historial de equipos (Sistemas):', err));
+        }
+
+        async function guardarSolo() {
+          errorValidacion.value = '';
+          if (!form.ticket) {
+            errorValidacion.value = 'Ingresa el número de Ticket antes de guardar.';
+            return;
+          }
+          guardando.value = true;
+          try {
+            await guardarHistorial();
+          } finally {
+            guardando.value = false;
+          }
+        }
+
+        function generarPDF() {
+          errorValidacion.value = '';
+          if (!form.ticket) {
+            errorValidacion.value = 'Ingresa el número de Ticket antes de generar el PDF.';
+            return;
+          }
+          generando.value = true;
+          try {
+            const doc = crearPDFDesdeDatos(form);
+            const nombreArchivo = `checklist_equipo_sistemas_${form.ticket}_${form.fecha}.pdf`;
+            doc.save(nombreArchivo);
+            guardarHistorial(nombreArchivo);
+          } finally {
+            generando.value = false;
+          }
+        }
+
+        function descargarDesdeHistorial(entry) {
+          const doc = crearPDFDesdeDatos(entry);
+          doc.save(entry.archivo || `checklist_equipo_sistemas_${entry.ticket}_${entry.fecha}.pdf`);
+        }
+
+        function borrarDelHistorial(entry) {
+          if (!db) return;
+          if (!confirm(`¿Borrar el checklist del ticket #${entry.ticket}? Esta acción no se puede deshacer.`)) {
+            return;
+          }
+          db.collection('historialEquiposSistemas')
+            .doc(entry.id)
+            .delete()
+            .then(() => {
+              if (modoEdicion.value && ticketCargado.value === entry.ticket) {
+                nuevoChecklist();
+              }
+            })
+            .catch((err) => console.error('Error borrando checklist de equipo (Sistemas):', err));
+        }
+
+        return {
+          form,
+          secciones,
+          generando,
+          guardando,
+          generarPDF,
+          guardarSolo,
+          isSectionAllChecked,
+          toggleSection,
+          historial,
+          firebaseListo,
+          esAdmin,
+          descargarDesdeHistorial,
+          borrarDelHistorial,
+          errorValidacion,
+          ticketEncontrado,
+          modoEdicion,
+          ticketCargado,
+          buscarTicket,
+          cargarChecklist,
+          nuevoChecklist,
+        };
+      },
+    };
+
     const SeguimientoCasos = {
       components: { SelectorTecnico },
       template: `
@@ -2828,17 +3313,34 @@ ${items}`;
         { path: '/', component: ChecklistVehiculo },
         { path: '/plantillas', component: GeneradorPlantillas },
         { path: '/equipos', component: ChecklistEquipo },
+        { path: '/equipos-sistemas', component: ChecklistEquipoSistemas },
         { path: '/seguimiento', component: SeguimientoCasos },
       ],
     });
 
+    // Si el rol tiene rutas restringidas (ver RUTAS_PERMITIDAS_POR_ROL), impide navegar fuera de ellas.
+    router.beforeEach((to, from, next) => {
+      const permitidas = RUTAS_PERMITIDAS_POR_ROL[AUTH.rol];
+      if (permitidas && !permitidas.includes(to.path)) {
+        next(permitidas[0]);
+      } else {
+        next();
+      }
+    });
+
     createApp({
       setup() {
+        function puedeVerRuta(path) {
+          const permitidas = RUTAS_PERMITIDAS_POR_ROL[AUTH.rol];
+          return !permitidas || permitidas.includes(path);
+        }
+
         return {
           cargando: computed(() => AUTH.cargando),
           puedeUsarApp: computed(() => !firebaseListoGlobal || !!AUTH.usuario),
           usuario: computed(() => AUTH.usuario),
           rol: computed(() => AUTH.rol),
+          puedeVerRuta,
           iniciarSesionGoogle,
           cerrarSesion,
         };
@@ -2928,6 +3430,9 @@ ${items}`;
       border: 1px solid #ffe1b3;
       border-radius: 0.375rem;
       padding: 1rem;
+    }
+    .checklist__resp-select {
+      width: 68px;
     }
     .checklist__tecnicos-panel {
       background-color: #f8f9fa;
