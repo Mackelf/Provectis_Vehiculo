@@ -2143,28 +2143,6 @@ ${items}`;
       return form;
     }
 
-    // Igual que crearEstadoInicialEquipo, pero cada ítem lleva además un campo
-    // "...Resp" ('S' = Sistemas, 'T' = Técnico, '' = sin asignar) para saber quién hizo la tarea.
-    function crearEstadoInicialEquipoSistemas() {
-      const form = {
-        ticket: '',
-        hostname: '',
-        fecha: new Date().toISOString().slice(0, 10),
-        modelo: '',
-        numeroSerie: '',
-        soWin: '',
-        nombreSoporte: '',
-      };
-      SECCIONES_EQUIPO.forEach((section) => {
-        form[section.key] = {};
-        section.items.forEach((item) => {
-          form[section.key][item.key] = false;
-          form[section.key][item.key + 'Resp'] = '';
-        });
-      });
-      return form;
-    }
-
     const ChecklistEquipo = {
       components: { SelectorTecnico },
       template: `
@@ -2599,7 +2577,8 @@ ${items}`;
             <div class="card-body">
               <h1 class="checklist__title h4 mb-1">Checklist Configuración Equipos — Sistemas</h1>
               <p class="checklist__subtitle text-muted mb-4">
-                Instalación de equipo. Marca en cada ítem quién lo realizó (S = Sistemas, T = Técnico).
+                Instalación de equipo. La columna S/T indica quién tiene asignada cada tarea
+                (S = Sistemas, T = Técnico) — solo un admin puede cambiar esa asignación, y no se incluye en el PDF.
               </p>
 
               <div class="row g-3 mb-2">
@@ -2703,11 +2682,19 @@ ${items}`;
                       </label>
                     </div>
                     <div class="col-auto">
-                      <select v-model="form[section.key][item.key + 'Resp']" class="form-select form-select-sm checklist__resp-select">
+                      <select
+                        v-if="esAdmin"
+                        :value="asignaciones.mapa[section.key + '.' + item.key] || ''"
+                        @change="asignarResponsable(section, item, $event.target.value)"
+                        class="form-select form-select-sm checklist__resp-select"
+                      >
                         <option value="">—</option>
                         <option value="S">S</option>
                         <option value="T">T</option>
                       </select>
+                      <span v-else class="badge bg-secondary checklist__resp-badge">
+                        {{ asignaciones.mapa[section.key + '.' + item.key] || '—' }}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2795,7 +2782,7 @@ ${items}`;
       `,
       setup() {
         const route = VueRouter.useRoute();
-        const form = reactive(crearEstadoInicialEquipoSistemas());
+        const form = reactive(crearEstadoInicialEquipo());
         if (route.query.ticket) {
           const t = Number(route.query.ticket);
           form.ticket = Number.isNaN(t) ? route.query.ticket : t;
@@ -2810,6 +2797,29 @@ ${items}`;
         const ticketEncontrado = ref(null);
         const modoEdicion = ref(false);
         const ticketCargado = ref(null);
+
+        // Asignación fija S/T por ítem (quién es responsable de cada tarea), NO por checklist.
+        // Solo un admin puede cambiarla; no se guarda junto al checklist ni se incluye en el PDF.
+        const asignaciones = reactive({ mapa: {} });
+        if (db) {
+          db.collection('config')
+            .doc('asignacionesEquiposSistemas')
+            .onSnapshot(
+              (doc) => {
+                asignaciones.mapa = doc.exists ? doc.data() : {};
+              },
+              (err) => console.error('Error leyendo asignaciones S/T:', err)
+            );
+        }
+
+        function asignarResponsable(section, item, valor) {
+          if (!db) return;
+          const clave = section.key + '.' + item.key;
+          db.collection('config')
+            .doc('asignacionesEquiposSistemas')
+            .set({ [clave]: valor }, { merge: true })
+            .catch((err) => console.error('Error guardando asignación S/T:', err));
+        }
 
         if (db) {
           db.collection('historialEquiposSistemas')
@@ -2854,7 +2864,7 @@ ${items}`;
 
         function cargarChecklist(entry) {
           Object.keys(form).forEach((k) => delete form[k]);
-          Object.assign(form, JSON.parse(JSON.stringify(crearEstadoInicialEquipoSistemas())));
+          Object.assign(form, JSON.parse(JSON.stringify(crearEstadoInicialEquipo())));
           Object.keys(form).forEach((k) => {
             if (k in entry) form[k] = entry[k];
           });
@@ -2865,7 +2875,7 @@ ${items}`;
 
         function nuevoChecklist() {
           Object.keys(form).forEach((k) => delete form[k]);
-          Object.assign(form, crearEstadoInicialEquipoSistemas());
+          Object.assign(form, crearEstadoInicialEquipo());
           modoEdicion.value = false;
           ticketCargado.value = null;
           ticketEncontrado.value = null;
@@ -2894,8 +2904,6 @@ ${items}`;
 
           let cursorY = doc.lastAutoTable.finalY + 20;
 
-          const RESP_LABEL = { S: 'Sistemas', T: 'Técnico' };
-
           secciones.forEach((section) => {
             if (cursorY > 700) {
               doc.addPage();
@@ -2907,16 +2915,15 @@ ${items}`;
             const body = section.items.map((item) => [
               item.label,
               data[section.key][item.key] ? 'Sí' : 'No',
-              RESP_LABEL[data[section.key][item.key + 'Resp']] || '-',
             ]);
 
             doc.autoTable({
               startY: cursorY + 8,
               theme: 'grid',
               styles: { fontSize: 8 },
-              head: [['Ítem', 'Sí/No', 'Responsable']],
+              head: [['Ítem', 'Sí/No']],
               body,
-              columnStyles: { 0: { cellWidth: 380 }, 1: { cellWidth: 40 }, 2: { cellWidth: 60 } },
+              columnStyles: { 0: { cellWidth: 440 }, 1: { cellWidth: 40 } },
               margin: { left: 40, right: 40 },
             });
 
@@ -3027,6 +3034,8 @@ ${items}`;
           buscarTicket,
           cargarChecklist,
           nuevoChecklist,
+          asignaciones,
+          asignarResponsable,
         };
       },
     };
@@ -3433,6 +3442,11 @@ ${items}`;
     }
     .checklist__resp-select {
       width: 68px;
+    }
+    .checklist__resp-badge {
+      font-size: 0.75rem;
+      min-width: 28px;
+      display: inline-block;
     }
     .checklist__tecnicos-panel {
       background-color: #f8f9fa;
