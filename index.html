@@ -2751,7 +2751,7 @@ ${items}`;
                         <td>{{ entry.modelo }}</td>
                         <td class="text-end">
                           <button
-                            v-if="esAdmin"
+                            v-if="puedeEditar"
                             class="btn btn-sm btn-outline-primary me-1"
                             @click="cargarChecklist(entry)"
                           >
@@ -2793,6 +2793,7 @@ ${items}`;
         const historial = ref([]);
         const firebaseListo = firebaseListoGlobal;
         const esAdmin = computed(() => AUTH.rol === 'admin');
+        const puedeEditar = computed(() => AUTH.rol === 'admin' || AUTH.rol === 'tecnico_sistemas');
         const errorValidacion = ref('');
         const ticketEncontrado = ref(null);
         const modoEdicion = ref(false);
@@ -3025,6 +3026,7 @@ ${items}`;
           historial,
           firebaseListo,
           esAdmin,
+          puedeEditar,
           descargarDesdeHistorial,
           borrarDelHistorial,
           errorValidacion,
