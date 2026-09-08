@@ -2068,7 +2068,6 @@ ${items}`;
         key: 'configuracionBase',
         label: 'Configuración Base',
         items: [
-          { key: 'borradoSeguro', label: 'Borrado seguro' },
           { key: 'instalacionSO', label: 'Instalación de sistema operativo y particiones correspondientes' },
           { key: 'actualizacionParches', label: 'Actualización de parches de seguridad y drivers a la última versión' },
           { key: 'actualizacionesAutomaticas', label: 'Habilitación de actualizaciones automáticas de Windows' },
@@ -2111,10 +2110,10 @@ ${items}`;
         key: 'instalacionesFinales',
         label: 'Instalaciones Finales',
         items: [
-          { key: 'vicariusTopiaChilquinta', label: 'Vicarius Topia Chilquinta' },
-          { key: 'vicariusTopiaTecnored', label: 'Vicarius Topia Tecnored' },
-          { key: 'cortexXDRGrupoEmpresas', label: 'Cortex XDR – Repositorio Grupo Empresas' },
-          { key: 'cortexXDRTecnored', label: 'Cortex XDR – Repositorio Tecnored' },
+          { key: 'vicariusTopiaChilquinta', label: 'Vicarius Topia Chilquinta', indent: true },
+          { key: 'vicariusTopiaTecnored', label: 'Vicarius Topia Tecnored', indent: true },
+          { key: 'cortexXDRGrupoEmpresas', label: 'Cortex XDR – Repositorio Grupo Empresas', indent: true },
+          { key: 'cortexXDRTecnored', label: 'Cortex XDR – Repositorio Tecnored', indent: true },
           { key: 'validarGLPI', label: 'Validar conexión con Inventario GLPI – Chilquinta' },
           { key: 'validarOCS', label: 'Validar conexión con Inventario OCS – Filiales Sur, Centro y Tecnored' },
           { key: 'passwordBios', label: 'Ingreso de contraseña para acceso en BIOS' },
@@ -2132,6 +2131,8 @@ ${items}`;
         modelo: '',
         numeroSerie: '',
         soWin: '',
+        borradoSeguro: false,
+        observacion: '',
         nombreSoporte: '',
       };
       SECCIONES_EQUIPO.forEach((section) => {
@@ -2183,6 +2184,21 @@ ${items}`;
                   <label class="form-label checklist__label">S.O / WIN</label>
                   <input v-model="form.soWin" type="text" class="form-control" />
                 </div>
+              </div>
+
+              <div class="form-check mb-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="borradoSeguro"
+                  v-model="form.borradoSeguro"
+                />
+                <label class="form-check-label" for="borradoSeguro">Borrado seguro</label>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label checklist__label">Observación</label>
+                <textarea v-model="form.observacion" class="form-control" rows="2"></textarea>
               </div>
 
               <div v-if="errorValidacion" class="text-danger small mb-3">{{ errorValidacion }}</div>
@@ -2415,56 +2431,94 @@ ${items}`;
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
-          doc.setFontSize(14);
-          doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS', 40, 40);
-          doc.setFontSize(9);
-          doc.text(`Ticket: ${data.ticket}`, 40, 55);
+          const ML = 40;
+          const MR = 40;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const boxSize = 9;
+          const boxX = pageWidth - MR - boxSize;
+          const textWidth = boxX - ML - 12;
+          const lineHeight = 12;
 
-          doc.autoTable({
-            startY: 68,
-            theme: 'grid',
-            styles: { fontSize: 9 },
-            body: [
-              ['Hostname', data.hostname, 'Fecha', formatearFecha(data.fecha)],
-              ['Modelo', data.modelo, 'S/N', data.numeroSerie],
-              ['S.O / WIN', data.soWin, '', ''],
-            ],
-          });
-
-          let cursorY = doc.lastAutoTable.finalY + 20;
-
-          secciones.forEach((section) => {
-            if (cursorY > 700) {
+          function asegurarEspacio(alturaNecesaria) {
+            if (cursorY + alturaNecesaria > pageHeight - 50) {
               doc.addPage();
               cursorY = 40;
             }
-            doc.setFontSize(10);
-            doc.text(section.label, 40, cursorY);
+          }
 
-            const body = section.items.map((item) => [
-              item.label,
-              data[section.key][item.key] ? 'Sí' : 'No',
-            ]);
+          function dibujarItem(item, marcado) {
+            const x = ML + (item.indent ? 14 : 0);
+            const prefijo = item.indent ? '· ' : '';
+            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 14 : 0));
+            const alto = lineas.length * lineHeight;
+            asegurarEspacio(alto + 4);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(lineas, x, cursorY);
+            const boxY = cursorY - 7;
+            doc.rect(boxX, boxY, boxSize, boxSize);
+            if (marcado) {
+              doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
+              doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
+            }
+            cursorY += alto + 4;
+          }
 
-            doc.autoTable({
-              startY: cursorY + 8,
-              theme: 'grid',
-              styles: { fontSize: 8 },
-              head: [['Ítem', 'Sí/No']],
-              body,
-              columnStyles: { 0: { cellWidth: 440 }, 1: { cellWidth: 40 } },
-              margin: { left: 40, right: 40 },
+          let cursorY = 40;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(13);
+          doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS', pageWidth / 2, cursorY, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+          cursorY += 22;
+
+          doc.setFontSize(9);
+          doc.text(`Ticket: ${data.ticket ?? ''}`, ML, cursorY);
+          cursorY += 14;
+          doc.text(`Hostname: ${data.hostname || ''}`, ML, cursorY);
+          doc.text(`Fecha: ${formatearFecha(data.fecha)}`, ML + 280, cursorY);
+          cursorY += 14;
+          doc.text(`Modelo: ${data.modelo || ''}`, ML, cursorY);
+          doc.text(`S/N: ${data.numeroSerie || ''}`, ML + 280, cursorY);
+          cursorY += 14;
+          doc.text(`S.O: WIN: ${data.soWin || ''}`, ML, cursorY);
+          cursorY += 18;
+
+          doc.text('Borrado seguro', ML, cursorY);
+          {
+            const boxY = cursorY - 7;
+            doc.rect(boxX, boxY, boxSize, boxSize);
+            if (data.borradoSeguro) {
+              doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
+              doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
+            }
+          }
+          cursorY += 16;
+
+          doc.text(`Observación: ${data.observacion || ''}`, ML, cursorY);
+          cursorY += 12;
+          doc.line(ML, cursorY, pageWidth - MR, cursorY);
+          cursorY += 20;
+
+          secciones.forEach((section) => {
+            asegurarEspacio(20);
+            if (section.key !== 'configuracionBase') {
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.text(section.label + ':', ML, cursorY);
+              doc.setFont('helvetica', 'normal');
+              cursorY += 14;
+            }
+            section.items.forEach((item) => {
+              dibujarItem(item, data[section.key][item.key]);
             });
-
-            cursorY = doc.lastAutoTable.finalY + 20;
+            cursorY += 8;
           });
 
-          if (cursorY > 740) {
-            doc.addPage();
-            cursorY = 40;
-          }
+          asegurarEspacio(30);
+          cursorY += 16;
           doc.setFontSize(9);
-          doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte}`, 40, cursorY);
+          doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte || ''}`, ML, cursorY);
 
           return doc;
         }
@@ -2612,6 +2666,21 @@ ${items}`;
                   <label class="form-label checklist__label">S.O / WIN</label>
                   <input v-model="form.soWin" type="text" class="form-control" />
                 </div>
+              </div>
+
+              <div class="form-check mb-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="borradoSeguro"
+                  v-model="form.borradoSeguro"
+                />
+                <label class="form-check-label" for="borradoSeguro">Borrado seguro</label>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label checklist__label">Observación</label>
+                <textarea v-model="form.observacion" class="form-control" rows="2"></textarea>
               </div>
 
               <div v-if="errorValidacion" class="text-danger small mb-3">{{ errorValidacion }}</div>
@@ -2887,56 +2956,94 @@ ${items}`;
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
-          doc.setFontSize(14);
-          doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS — SISTEMAS', 40, 40);
-          doc.setFontSize(9);
-          doc.text(`Ticket: ${data.ticket}`, 40, 55);
+          const ML = 40;
+          const MR = 40;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const boxSize = 9;
+          const boxX = pageWidth - MR - boxSize;
+          const textWidth = boxX - ML - 12;
+          const lineHeight = 12;
 
-          doc.autoTable({
-            startY: 68,
-            theme: 'grid',
-            styles: { fontSize: 9 },
-            body: [
-              ['Hostname', data.hostname, 'Fecha', formatearFecha(data.fecha)],
-              ['Modelo', data.modelo, 'S/N', data.numeroSerie],
-              ['S.O / WIN', data.soWin, '', ''],
-            ],
-          });
-
-          let cursorY = doc.lastAutoTable.finalY + 20;
-
-          secciones.forEach((section) => {
-            if (cursorY > 700) {
+          function asegurarEspacio(alturaNecesaria) {
+            if (cursorY + alturaNecesaria > pageHeight - 50) {
               doc.addPage();
               cursorY = 40;
             }
-            doc.setFontSize(10);
-            doc.text(section.label, 40, cursorY);
+          }
 
-            const body = section.items.map((item) => [
-              item.label,
-              data[section.key][item.key] ? 'Sí' : 'No',
-            ]);
+          function dibujarItem(item, marcado) {
+            const x = ML + (item.indent ? 14 : 0);
+            const prefijo = item.indent ? '· ' : '';
+            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 14 : 0));
+            const alto = lineas.length * lineHeight;
+            asegurarEspacio(alto + 4);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(lineas, x, cursorY);
+            const boxY = cursorY - 7;
+            doc.rect(boxX, boxY, boxSize, boxSize);
+            if (marcado) {
+              doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
+              doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
+            }
+            cursorY += alto + 4;
+          }
 
-            doc.autoTable({
-              startY: cursorY + 8,
-              theme: 'grid',
-              styles: { fontSize: 8 },
-              head: [['Ítem', 'Sí/No']],
-              body,
-              columnStyles: { 0: { cellWidth: 440 }, 1: { cellWidth: 40 } },
-              margin: { left: 40, right: 40 },
+          let cursorY = 40;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(13);
+          doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS — SISTEMAS', pageWidth / 2, cursorY, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+          cursorY += 22;
+
+          doc.setFontSize(9);
+          doc.text(`Ticket: ${data.ticket ?? ''}`, ML, cursorY);
+          cursorY += 14;
+          doc.text(`Hostname: ${data.hostname || ''}`, ML, cursorY);
+          doc.text(`Fecha: ${formatearFecha(data.fecha)}`, ML + 280, cursorY);
+          cursorY += 14;
+          doc.text(`Modelo: ${data.modelo || ''}`, ML, cursorY);
+          doc.text(`S/N: ${data.numeroSerie || ''}`, ML + 280, cursorY);
+          cursorY += 14;
+          doc.text(`S.O: WIN: ${data.soWin || ''}`, ML, cursorY);
+          cursorY += 18;
+
+          doc.text('Borrado seguro', ML, cursorY);
+          {
+            const boxY = cursorY - 7;
+            doc.rect(boxX, boxY, boxSize, boxSize);
+            if (data.borradoSeguro) {
+              doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
+              doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
+            }
+          }
+          cursorY += 16;
+
+          doc.text(`Observación: ${data.observacion || ''}`, ML, cursorY);
+          cursorY += 12;
+          doc.line(ML, cursorY, pageWidth - MR, cursorY);
+          cursorY += 20;
+
+          secciones.forEach((section) => {
+            asegurarEspacio(20);
+            if (section.key !== 'configuracionBase') {
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.text(section.label + ':', ML, cursorY);
+              doc.setFont('helvetica', 'normal');
+              cursorY += 14;
+            }
+            section.items.forEach((item) => {
+              dibujarItem(item, data[section.key][item.key]);
             });
-
-            cursorY = doc.lastAutoTable.finalY + 20;
+            cursorY += 8;
           });
 
-          if (cursorY > 740) {
-            doc.addPage();
-            cursorY = 40;
-          }
+          asegurarEspacio(30);
+          cursorY += 16;
           doc.setFontSize(9);
-          doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte}`, 40, cursorY);
+          doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte || ''}`, ML, cursorY);
 
           return doc;
         }
