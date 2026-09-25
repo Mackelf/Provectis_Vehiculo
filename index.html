@@ -2121,6 +2121,14 @@ ${items}`;
       },
     ];
 
+    // Copia de SECCIONES_EQUIPO solo para "Checklist Equipos — Sistemas": mismas claves de datos,
+    // pero con la etiqueta de 'instalacionSO' acortada (según el formulario Tecnored).
+    const SECCIONES_EQUIPO_SISTEMAS = JSON.parse(JSON.stringify(SECCIONES_EQUIPO));
+    {
+      const itemSO = SECCIONES_EQUIPO_SISTEMAS[0].items.find((i) => i.key === 'instalacionSO');
+      if (itemSO) itemSO.label = 'Instalacion de sistema operativo';
+    }
+
     function crearEstadoInicialEquipo() {
       const form = {
         ticket: '',
@@ -2433,89 +2441,89 @@ ${items}`;
           const MR = 40;
           const pageWidth = doc.internal.pageSize.getWidth();
           const pageHeight = doc.internal.pageSize.getHeight();
-          const boxSize = 9;
+          const boxSize = 8;
           const boxX = pageWidth - MR - boxSize;
-          const textWidth = boxX - ML - 12;
-          const lineHeight = 12;
+          const textWidth = boxX - ML - 10;
+          const lineHeight = 10.5;
 
           function asegurarEspacio(alturaNecesaria) {
-            if (cursorY + alturaNecesaria > pageHeight - 50) {
+            if (cursorY + alturaNecesaria > pageHeight - 40) {
               doc.addPage();
               cursorY = 40;
             }
           }
 
           function dibujarItem(item, marcado) {
-            const x = ML + (item.indent ? 14 : 0);
+            const x = ML + (item.indent ? 12 : 0);
             const prefijo = item.indent ? '· ' : '';
-            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 14 : 0));
+            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 12 : 0));
             const alto = lineas.length * lineHeight;
-            asegurarEspacio(alto + 4);
+            asegurarEspacio(alto + 1.5);
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
+            doc.setFontSize(8);
             doc.text(lineas, x, cursorY);
-            const boxY = cursorY - 7;
+            const boxY = cursorY - 6.5;
             doc.rect(boxX, boxY, boxSize, boxSize);
             if (marcado) {
               doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
               doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
             }
-            cursorY += alto + 4;
+            cursorY += alto + 1.5;
           }
 
-          let cursorY = 40;
+          let cursorY = 36;
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(13);
+          doc.setFontSize(12);
           doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS', pageWidth / 2, cursorY, { align: 'center' });
           doc.setFont('helvetica', 'normal');
-          cursorY += 22;
+          cursorY += 16;
 
-          doc.setFontSize(9);
+          doc.setFontSize(8);
           doc.text(`Ticket: ${data.ticket ?? ''}`, ML, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`Hostname: ${data.hostname || ''}`, ML, cursorY);
           doc.text(`Fecha: ${formatearFecha(data.fecha)}`, ML + 280, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`Modelo: ${data.modelo || ''}`, ML, cursorY);
           doc.text(`S/N: ${data.numeroSerie || ''}`, ML + 280, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`S.O: WIN: ${data.soWin || ''}`, ML, cursorY);
-          cursorY += 18;
+          cursorY += 13;
 
           doc.text('Borrado seguro', ML, cursorY);
           {
-            const boxY = cursorY - 7;
+            const boxY = cursorY - 6.5;
             doc.rect(boxX, boxY, boxSize, boxSize);
             if (data.borradoSeguro) {
               doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
               doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
             }
           }
-          cursorY += 16;
+          cursorY += 12;
 
           doc.text(`Observación: ${data.observacion || ''}`, ML, cursorY);
-          cursorY += 12;
+          cursorY += 9;
           doc.line(ML, cursorY, pageWidth - MR, cursorY);
-          cursorY += 20;
+          cursorY += 14;
 
           secciones.forEach((section) => {
-            asegurarEspacio(20);
+            asegurarEspacio(16);
             if (section.key !== 'configuracionBase') {
               doc.setFont('helvetica', 'bold');
-              doc.setFontSize(10);
+              doc.setFontSize(9);
               doc.text(section.label + ':', ML, cursorY);
               doc.setFont('helvetica', 'normal');
-              cursorY += 14;
+              cursorY += 11;
             }
             section.items.forEach((item) => {
               dibujarItem(item, data[section.key][item.key]);
             });
-            cursorY += 8;
+            cursorY += 4;
           });
 
-          asegurarEspacio(30);
-          cursorY += 16;
-          doc.setFontSize(9);
+          asegurarEspacio(24);
+          cursorY += 12;
+          doc.setFontSize(8);
           doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte || ''}`, ML, cursorY);
 
           return doc;
@@ -2854,7 +2862,7 @@ ${items}`;
           const t = Number(route.query.ticket);
           form.ticket = Number.isNaN(t) ? route.query.ticket : t;
         }
-        const secciones = SECCIONES_EQUIPO;
+        const secciones = SECCIONES_EQUIPO_SISTEMAS;
         const generando = ref(false);
         const guardando = ref(false);
         const historial = ref([]);
@@ -2958,89 +2966,89 @@ ${items}`;
           const MR = 40;
           const pageWidth = doc.internal.pageSize.getWidth();
           const pageHeight = doc.internal.pageSize.getHeight();
-          const boxSize = 9;
+          const boxSize = 8;
           const boxX = pageWidth - MR - boxSize;
-          const textWidth = boxX - ML - 12;
-          const lineHeight = 12;
+          const textWidth = boxX - ML - 10;
+          const lineHeight = 10.5;
 
           function asegurarEspacio(alturaNecesaria) {
-            if (cursorY + alturaNecesaria > pageHeight - 50) {
+            if (cursorY + alturaNecesaria > pageHeight - 40) {
               doc.addPage();
               cursorY = 40;
             }
           }
 
           function dibujarItem(item, marcado) {
-            const x = ML + (item.indent ? 14 : 0);
+            const x = ML + (item.indent ? 12 : 0);
             const prefijo = item.indent ? '· ' : '';
-            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 14 : 0));
+            const lineas = doc.splitTextToSize(prefijo + item.label, textWidth - (item.indent ? 12 : 0));
             const alto = lineas.length * lineHeight;
-            asegurarEspacio(alto + 4);
+            asegurarEspacio(alto + 1.5);
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
+            doc.setFontSize(8);
             doc.text(lineas, x, cursorY);
-            const boxY = cursorY - 7;
+            const boxY = cursorY - 6.5;
             doc.rect(boxX, boxY, boxSize, boxSize);
             if (marcado) {
               doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
               doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
             }
-            cursorY += alto + 4;
+            cursorY += alto + 1.5;
           }
 
-          let cursorY = 40;
+          let cursorY = 36;
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(13);
+          doc.setFontSize(12);
           doc.text('CHECKLIST CONFIGURACIÓN EQUIPOS — SISTEMAS', pageWidth / 2, cursorY, { align: 'center' });
           doc.setFont('helvetica', 'normal');
-          cursorY += 22;
+          cursorY += 16;
 
-          doc.setFontSize(9);
+          doc.setFontSize(8);
           doc.text(`Ticket: ${data.ticket ?? ''}`, ML, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`Hostname: ${data.hostname || ''}`, ML, cursorY);
           doc.text(`Fecha: ${formatearFecha(data.fecha)}`, ML + 280, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`Modelo: ${data.modelo || ''}`, ML, cursorY);
           doc.text(`S/N: ${data.numeroSerie || ''}`, ML + 280, cursorY);
-          cursorY += 14;
+          cursorY += 11;
           doc.text(`S.O: WIN: ${data.soWin || ''}`, ML, cursorY);
-          cursorY += 18;
+          cursorY += 13;
 
           doc.text('Borrado seguro', ML, cursorY);
           {
-            const boxY = cursorY - 7;
+            const boxY = cursorY - 6.5;
             doc.rect(boxX, boxY, boxSize, boxSize);
             if (data.borradoSeguro) {
               doc.line(boxX, boxY, boxX + boxSize, boxY + boxSize);
               doc.line(boxX, boxY + boxSize, boxX + boxSize, boxY);
             }
           }
-          cursorY += 16;
+          cursorY += 12;
 
           doc.text(`Observación: ${data.observacion || ''}`, ML, cursorY);
-          cursorY += 12;
+          cursorY += 9;
           doc.line(ML, cursorY, pageWidth - MR, cursorY);
-          cursorY += 20;
+          cursorY += 14;
 
           secciones.forEach((section) => {
-            asegurarEspacio(20);
+            asegurarEspacio(16);
             if (section.key !== 'configuracionBase') {
               doc.setFont('helvetica', 'bold');
-              doc.setFontSize(10);
+              doc.setFontSize(9);
               doc.text(section.label + ':', ML, cursorY);
               doc.setFont('helvetica', 'normal');
-              cursorY += 14;
+              cursorY += 11;
             }
             section.items.forEach((item) => {
               dibujarItem(item, data[section.key][item.key]);
             });
-            cursorY += 8;
+            cursorY += 4;
           });
 
-          asegurarEspacio(30);
-          cursorY += 16;
-          doc.setFontSize(9);
+          asegurarEspacio(24);
+          cursorY += 12;
+          doc.setFontSize(8);
           doc.text(`Nombre y Firma Soporte TI: ${data.nombreSoporte || ''}`, ML, cursorY);
 
           return doc;
