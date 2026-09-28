@@ -49,6 +49,9 @@
             <router-link v-if="puedeVerRuta('/seguimiento')" class="nav-link app-nav__link" to="/seguimiento" active-class="active">
               Seguimiento
             </router-link>
+            <router-link v-if="esAdminRaiz" class="nav-link app-nav__link" to="/admin-usuarios" active-class="active">
+              Usuarios
+            </router-link>
           </div>
           <div v-if="usuario" class="app-nav__user ms-auto d-flex align-items-center">
             <span class="text-muted small me-2">{{ usuario.displayName }} · {{ rol }}</span>
@@ -994,62 +997,6 @@
                   </div>
                 </div>
               </div>
-
-              <div v-if="esAdminRaiz" class="mt-4 checklist__usuarios-panel">
-                <h2 class="h6 text-uppercase text-muted mb-2">Gestionar Usuarios Autorizados</h2>
-                <p class="text-muted small mb-2">
-                  Solo tú y el otro admin raíz pueden editar esta lista. Los cambios aplican de inmediato,
-                  sin necesidad de hacer deploy.
-                </p>
-                <div class="table-responsive mb-3">
-                  <table class="table table-sm align-middle">
-                    <thead>
-                      <tr>
-                        <th>Correo</th>
-                        <th>Rol</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(rol, email) in usuariosAutorizadosState.mapa" :key="email">
-                        <td>{{ email }}</td>
-                        <td>{{ rol }}</td>
-                        <td class="text-end">
-                          <button
-                            class="btn btn-sm btn-outline-danger"
-                            @click="quitarUsuarioAutorizado(email)"
-                          >
-                            Quitar
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="row g-2 align-items-end">
-                  <div class="col-md-5">
-                    <label class="form-label checklist__label">Correo</label>
-                    <input v-model="nuevoUsuarioEmail" type="email" class="form-control form-control-sm" />
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label checklist__label">Rol</label>
-                    <select v-model="nuevoUsuarioRol" class="form-select form-select-sm">
-                      <option value="tecnico">tecnico</option>
-                      <option value="tecnico_sistemas">tecnico_sistemas</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </div>
-                  <div class="col-md-4">
-                    <button
-                      type="button"
-                      class="btn btn-outline-primary btn-sm w-100"
-                      @click="agregarNuevoUsuario"
-                    >
-                      Agregar usuario
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1062,17 +1009,7 @@
         const historial = ref([]);
         const firebaseListo = firebaseListoGlobal;
         const esAdmin = computed(() => AUTH.rol === 'admin');
-        const esAdminRaiz = computed(() => ADMINS_RAIZ.includes(AUTH.usuario && AUTH.usuario.email));
         const errorValidacion = ref('');
-        const nuevoUsuarioEmail = ref('');
-        const nuevoUsuarioRol = ref('tecnico');
-
-        function agregarNuevoUsuario() {
-          if (!nuevoUsuarioEmail.value.trim()) return;
-          agregarUsuarioAutorizado(nuevoUsuarioEmail.value, nuevoUsuarioRol.value);
-          nuevoUsuarioEmail.value = '';
-          nuevoUsuarioRol.value = 'tecnico';
-        }
 
         // ---- Registro de Cargas de Combustible ----
         function crearCargaVacia(odometroPrevio) {
@@ -1426,116 +1363,139 @@
         async function crearPDFDesdeDatos(data) {
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+          const ML = 40;
+          const MR = 40;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
 
-          doc.setFontSize(14);
-          doc.text('CHECK LIST VEHÍCULOS PROVECTIS', 40, 40);
-          doc.setFontSize(9);
-          doc.text('Formato N°1', 40, 55);
+          function asegurarEspacio(y, alturaNecesaria) {
+            if (y + alturaNecesaria > pageHeight - 30) {
+              doc.addPage();
+              return 40;
+            }
+            return y;
+          }
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(13);
+          doc.text('CHECK LIST VEHÍCULOS PROVECTIS', pageWidth / 2, 32, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.text('Formato N°1', pageWidth / 2, 43, { align: 'center' });
 
           doc.autoTable({
-            startY: 70,
+            startY: 50,
             theme: 'grid',
-            styles: { fontSize: 9 },
+            styles: { fontSize: 8.5, cellPadding: 2.5 },
             body: [
               ['Nombre Técnico de turno', data.nombreTecnico, 'Ciudad', data.ciudad],
               ['Fecha', formatearFecha(data.fecha), 'Proyecto', data.proyecto],
-              ['Patente', data.patente, 'KM Próxima Mantención', data.kmProximaMantencion],
-              ['KM Actual', data.kmActual, 'KM Última Mantención', data.kmUltimaMantencion],
+              ['Patente', data.patente, 'KM Próxima Mantención', String(data.kmProximaMantencion)],
+              ['KM Actual', String(data.kmActual), 'KM Última Mantención', String(data.kmUltimaMantencion)],
               ['Fecha Última Mantención', formatearFecha(data.fechaUltimaMantencion), '', ''],
             ],
           });
 
-          let cursorY = doc.lastAutoTable.finalY + 24;
+          let cursorY = doc.lastAutoTable.finalY + 12;
 
           // ---- Diagrama de daños del vehículo (2x2) ----
-          doc.setFontSize(10);
-          doc.text('Estado del Vehículo (marcas de daños)', 40, cursorY);
-          cursorY += 10;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.text('Estado del Vehículo (marcas de daños)', ML, cursorY);
+          cursorY += 14;
 
-          const imgW = 240;
-          const imgH = 144;
-          const gap = 15;
+          const imgW = 165;
+          const imgH = 99;
+          const gapImg = 10;
           const posiciones = [
-            { x: 40, y: cursorY },
-            { x: 40 + imgW + gap, y: cursorY },
-            { x: 40, y: cursorY + imgH + 18 },
-            { x: 40 + imgW + gap, y: cursorY + imgH + 18 },
+            { x: ML, y: cursorY },
+            { x: ML + imgW + gapImg, y: cursorY },
+            { x: ML, y: cursorY + imgH + 14 },
+            { x: ML + imgW + gapImg, y: cursorY + imgH + 14 },
           ];
 
+          doc.setFont('helvetica', 'normal');
           for (let i = 0; i < angulosVehiculo.length; i++) {
             const angulo = angulosVehiculo[i];
             const pos = posiciones[i];
             const guardada = data.imagenesDanos && data.imagenesDanos[angulo.key];
             const imgData = guardada || angulo.imagenBase;
-            doc.setFontSize(8);
+            doc.setFontSize(7.5);
             doc.text(angulo.label, pos.x, pos.y - 3);
             doc.addImage(imgData, tipoImagenPDF(imgData), pos.x, pos.y, imgW, imgH);
           }
-
-          cursorY = posiciones[2].y + imgH + 24;
+          cursorY = posiciones[2].y + imgH + 14;
 
           const ESTADO_LABEL = { buen: 'Buen Estado', regular: 'Regular', mal: 'Mal Estado' };
 
-          if (cursorY > 700) {
-            doc.addPage();
-            cursorY = 40;
-          }
-          doc.setFontSize(10);
-          doc.text('Seguridad del Vehículo', 40, cursorY);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.text('Seguridad del Vehículo', ML, cursorY);
+          doc.setFont('helvetica', 'normal');
           doc.autoTable({
-            startY: cursorY + 8,
+            startY: cursorY + 4,
             theme: 'grid',
-            styles: { fontSize: 9 },
+            styles: { fontSize: 7.8, cellPadding: 2.2 },
+            headStyles: { fontSize: 7.8, cellPadding: 2.2 },
             head: [['Ítem', 'Estado']],
             body: seguridadItems.map((item) => [
               item.label,
               ESTADO_LABEL[data.seguridad[item.key]] || '-',
             ]),
-            margin: { left: 40, right: 40 },
+            margin: { left: ML, right: MR },
           });
-          cursorY = doc.lastAutoTable.finalY + 20;
+          cursorY = doc.lastAutoTable.finalY + 12;
 
-          checkboxSections.forEach((section) => {
-            if (cursorY > 720) {
-              doc.addPage();
-              cursorY = 40;
-            }
-            doc.setFontSize(10);
-            doc.text(section.label, 40, cursorY);
+          // ---- Documentos/Neumáticos/Luces/Herramientas en 2 columnas ----
+          const halfWidth = (pageWidth - ML - MR - 14) / 2;
+          const colIzqX = ML;
+          const colDerX = ML + halfWidth + 14;
+          const gruposIzq = [checkboxSections[0], checkboxSections[2]]; // Documentos + Luces
+          const gruposDer = [checkboxSections[1], checkboxSections[3]]; // Neumáticos + Herramientas
 
-            const body = section.items.map((item) => [
-              item.label,
-              data[section.key][item.key] ? 'Sí' : 'No',
-            ]);
-
-            doc.autoTable({
-              startY: cursorY + 8,
-              theme: 'grid',
-              styles: { fontSize: 9 },
-              head: [['Ítem', 'Sí/No']],
-              body,
-              margin: { left: 40, right: 40 },
+          function dibujarColumna(grupos, x) {
+            let y = cursorY;
+            grupos.forEach((section) => {
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(8.3);
+              doc.text(section.label, x, y);
+              doc.setFont('helvetica', 'normal');
+              const body = section.items.map((item) => [
+                item.label,
+                data[section.key][item.key] ? 'Sí' : 'No',
+              ]);
+              doc.autoTable({
+                startY: y + 4,
+                theme: 'grid',
+                styles: { fontSize: 7.3, cellPadding: 1.8 },
+                headStyles: { fontSize: 7.3, cellPadding: 1.8 },
+                head: [['Ítem', 'Sí/No']],
+                body,
+                margin: { left: x, right: pageWidth - x - halfWidth },
+                tableWidth: halfWidth,
+              });
+              y = doc.lastAutoTable.finalY + 7;
             });
-
-            cursorY = doc.lastAutoTable.finalY + 20;
-          });
-
-          if (cursorY > 680) {
-            doc.addPage();
-            cursorY = 40;
+            return y;
           }
-          doc.setFontSize(10);
-          doc.text('Observaciones', 40, cursorY);
-          doc.setFontSize(9);
-          doc.text(doc.splitTextToSize(data.observaciones || '-', 500), 40, cursorY + 16);
 
-          cursorY += 70;
-          if (cursorY > 750) {
-            doc.addPage();
-            cursorY = 40;
-          }
+          const finalIzq = dibujarColumna(gruposIzq, colIzqX);
+          const finalDer = dibujarColumna(gruposDer, colDerX);
+          cursorY = Math.max(finalIzq, finalDer) + 5;
+
+          const obsLineas = doc.splitTextToSize(data.observaciones || '-', pageWidth - ML - MR);
+          cursorY = asegurarEspacio(cursorY, 12 + obsLineas.length * 9.5 + 22);
+          doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
-          doc.text(`Nombre y Firma Técnico: ${data.nombreTecnico}`, 40, cursorY);
+          doc.text('Observaciones', ML, cursorY);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.3);
+          doc.text(obsLineas, ML, cursorY + 11);
+          cursorY += 11 + obsLineas.length * 9.5 + 16;
+
+          cursorY = asegurarEspacio(cursorY, 12);
+          doc.setFontSize(8.3);
+          doc.text(`Nombre y Firma Técnico: ${data.nombreTecnico}`, ML, cursorY);
 
           return doc;
         }
@@ -1611,12 +1571,6 @@
           historial,
           firebaseListo,
           esAdmin,
-          esAdminRaiz,
-          usuariosAutorizadosState,
-          nuevoUsuarioEmail,
-          nuevoUsuarioRol,
-          agregarNuevoUsuario,
-          quitarUsuarioAutorizado,
           errorValidacion,
           cargaForm,
           guardandoCombustible,
@@ -3427,6 +3381,98 @@ ${items}`;
       },
     };
 
+    const AdminUsuarios = {
+      template: `
+        <div class="checklist">
+          <div class="card shadow-sm checklist__card">
+            <div class="card-body">
+              <h1 class="checklist__title h4 mb-1">Gestionar Usuarios Autorizados</h1>
+
+              <div v-if="!esAdminRaiz" class="alert alert-warning" role="alert">
+                No tienes permiso para ver esta sección — solo los admins raíz pueden gestionar usuarios.
+              </div>
+
+              <div v-else class="checklist__usuarios-panel mt-3">
+                <p class="text-muted small mb-2">
+                  Solo tú y el otro admin raíz pueden editar esta lista. Los cambios aplican de inmediato,
+                  sin necesidad de hacer deploy.
+                </p>
+                <div class="table-responsive mb-3">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Correo</th>
+                        <th>Rol</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(rol, email) in usuariosAutorizadosState.mapa" :key="email">
+                        <td>{{ email }}</td>
+                        <td>{{ rol }}</td>
+                        <td class="text-end">
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            @click="quitarUsuarioAutorizado(email)"
+                          >
+                            Quitar
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="row g-2 align-items-end">
+                  <div class="col-md-5">
+                    <label class="form-label checklist__label">Correo</label>
+                    <input v-model="nuevoUsuarioEmail" type="email" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label checklist__label">Rol</label>
+                    <select v-model="nuevoUsuarioRol" class="form-select form-select-sm">
+                      <option value="tecnico">tecnico</option>
+                      <option value="tecnico_sistemas">tecnico_sistemas</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm w-100"
+                      @click="agregarNuevoUsuario"
+                    >
+                      Agregar usuario
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const esAdminRaiz = computed(() => ADMINS_RAIZ.includes(AUTH.usuario && AUTH.usuario.email));
+        const nuevoUsuarioEmail = ref('');
+        const nuevoUsuarioRol = ref('tecnico');
+
+        function agregarNuevoUsuario() {
+          if (!nuevoUsuarioEmail.value.trim()) return;
+          agregarUsuarioAutorizado(nuevoUsuarioEmail.value, nuevoUsuarioRol.value);
+          nuevoUsuarioEmail.value = '';
+          nuevoUsuarioRol.value = 'tecnico';
+        }
+
+        return {
+          esAdminRaiz,
+          usuariosAutorizadosState,
+          nuevoUsuarioEmail,
+          nuevoUsuarioRol,
+          agregarNuevoUsuario,
+          quitarUsuarioAutorizado,
+        };
+      },
+    };
+
     /* =========================================================
        ROUTER + APP
        ========================================================= */
@@ -3439,6 +3485,7 @@ ${items}`;
         { path: '/equipos', component: ChecklistEquipo },
         { path: '/equipos-sistemas', component: ChecklistEquipoSistemas },
         { path: '/seguimiento', component: SeguimientoCasos },
+        { path: '/admin-usuarios', component: AdminUsuarios },
       ],
     });
 
@@ -3464,6 +3511,7 @@ ${items}`;
           puedeUsarApp: computed(() => !firebaseListoGlobal || !!AUTH.usuario),
           usuario: computed(() => AUTH.usuario),
           rol: computed(() => AUTH.rol),
+          esAdminRaiz: computed(() => ADMINS_RAIZ.includes(AUTH.usuario && AUTH.usuario.email)),
           puedeVerRuta,
           iniciarSesionGoogle,
           cerrarSesion,
