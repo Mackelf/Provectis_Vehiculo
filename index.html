@@ -73,6 +73,12 @@
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
   <script>
+    // ---- SharePoint (Power Automate) ----
+    // EDITA esto con la URL HTTP POST que te entrega el flujo de Power Automate
+    // (paso "Cuando se recibe una solicitud HTTP"). Mientras diga el valor de abajo,
+    // el botón "Enviar a SharePoint" se mantiene deshabilitado.
+    const SHAREPOINT_FLOW_URL = 'PEGA_AQUI_LA_URL_DEL_FLUJO';
+
     // ---- Firebase ----
     const firebaseConfig = {
       apiKey: 'AIzaSyDbbr25X6wQlgYqhIVy--jV1Yt9v3gBstM',
@@ -832,6 +838,19 @@
                 Generar PDF
               </button>
               <span v-if="generando" class="checklist__pdf-status text-muted ms-2">Generando…</span>
+              <button
+                type="button"
+                class="btn btn-outline-secondary checklist__pdf-btn ms-2"
+                :disabled="!sharePointListo || enviandoSharePoint"
+                :title="!sharePointListo ? 'Falta configurar SHAREPOINT_FLOW_URL en el código' : ''"
+                @click="enviarASharePoint"
+              >
+                Enviar a SharePoint
+              </button>
+              <span v-if="enviandoSharePoint" class="text-muted ms-2">Enviando…</span>
+              <div v-if="sharePointEstado" class="small mt-2" :class="sharePointEstado.startsWith('Error') ? 'text-danger' : 'text-success'">
+                {{ sharePointEstado }}
+              </div>
 
               <div class="mt-4 checklist__historial">
                 <h2 class="h6 text-uppercase text-muted mb-2">Historial de Checklists</h2>
@@ -1586,6 +1605,53 @@
           doc.save(entry.archivo || `checklist_${entry.patente}_${entry.fecha}.pdf`);
         }
 
+        const sharePointListo = SHAREPOINT_FLOW_URL !== 'PEGA_AQUI_LA_URL_DEL_FLUJO';
+        const enviandoSharePoint = ref(false);
+        const sharePointEstado = ref('');
+
+        async function enviarASharePoint() {
+          errorValidacion.value = '';
+          sharePointEstado.value = '';
+          if (!form.nombreTecnico) {
+            errorValidacion.value = 'Selecciona el Nombre Técnico de turno antes de enviar a SharePoint.';
+            return;
+          }
+          if (!form.kmActual) {
+            errorValidacion.value = 'Ingresa el KM Actual antes de enviar a SharePoint.';
+            return;
+          }
+          enviandoSharePoint.value = true;
+          try {
+            const doc = await crearPDFDesdeDatos({
+              ...form,
+              kmProximaMantencion: kmProximaMantencion.value,
+              kmUltimaMantencion: kmUltimaMantencion.value,
+              fechaUltimaMantencion: fechaUltimaMantencion.value,
+              imagenesDanos,
+            });
+            const nombreArchivo = `checklist_${form.patente}_${form.fecha}.pdf`;
+            // dataUristring viene como "data:application/pdf;filename=...;base64,XXXX" → nos quedamos solo con el base64
+            const dataUri = doc.output('datauristring');
+            const contenidoBase64 = dataUri.split(',')[1];
+
+            const resp = await fetch(SHAREPOINT_FLOW_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nombreArchivo, contenidoBase64 }),
+            });
+
+            if (!resp.ok) throw new Error(`El flujo respondió con estado ${resp.status}`);
+
+            sharePointEstado.value = 'Enviado a SharePoint correctamente.';
+            guardarHistorial(nombreArchivo);
+          } catch (err) {
+            console.error('Error enviando a SharePoint:', err);
+            sharePointEstado.value = 'Error al enviar a SharePoint. Intenta de nuevo.';
+          } finally {
+            enviandoSharePoint.value = false;
+          }
+        }
+
         function borrarDelHistorial(entry) {
           if (!db) return;
           if (!confirm(`¿Borrar el checklist del ${entry.fecha} (${entry.patente})? Esta acción no se puede deshacer.`)) {
@@ -1605,6 +1671,10 @@
           guardando,
           generarPDF,
           guardarSolo,
+          sharePointListo,
+          enviandoSharePoint,
+          sharePointEstado,
+          enviarASharePoint,
           isSectionAllChecked,
           toggleSection,
           alertaMantencion,
@@ -1836,6 +1906,24 @@ Buenas tardes. Junto con saludar, agradeceré su autorización para proceder con
 ${items}`;
         },
       },
+      {
+        id: 'borrado-seguro-ii',
+        label: 'Borrado Seguro II',
+        explicacion: 'Al ejecutar el borrado seguro se debe enviar la planilla en formato PDF con la firma del técnico. SERIE_BS_FECHA.PDF',
+        documentoGenera: 'Autorización cliente',
+        itemColumns: [],
+        extraFields: [
+          { key: 'serie', label: 'Serie del equipo', type: 'text' },
+          { key: 'ticket', label: 'Ticket', type: 'text' },
+        ],
+        generate(state) {
+          return `Asunto: ${state.serie} - ${state.ticket} - Borrado seguro
+
+Estimado Jose
+
+Favor su ayuda con su aprobación y la del cliente Chilquinta`;
+        },
+      },
     ];
 
     function createEmptyState(template) {
@@ -1895,6 +1983,11 @@ ${items}`;
               Para solicitar la desvinculación, se debe enviar correo a la mesa de ayuda
               <strong>servicedesk@chilquintas.cl</strong> a vicentet. Con copia a Jose, Joel y Felipe.
               Además el asunto debe seguir este formato: <strong>"Asunto: ABM Retiro - Nombre usuario."</strong>
+            </div>
+
+            <div v-if="selectedId === 'borrado-seguro-ii'" class="alert alert-info planilla__info" role="alert">
+              Este correo va dirigido a <strong>Jose Carrasco</strong> (supervisor),
+              con copia a <strong>Joel Bravo</strong>.
             </div>
 
             <div class="mb-3">
