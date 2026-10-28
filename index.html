@@ -40,6 +40,9 @@
             <router-link v-if="puedeVerRuta('/plantillas')" class="nav-link app-nav__link" to="/plantillas" active-class="active">
               Plantillas Provectis
             </router-link>
+            <router-link v-if="puedeVerRuta('/terreno')" class="nav-link app-nav__link" to="/terreno" active-class="active">
+              Plantilla Terreno
+            </router-link>
             <router-link v-if="puedeVerRuta('/equipos')" class="nav-link app-nav__link" to="/equipos" active-class="active">
               Checklist Equipos
             </router-link>
@@ -3514,6 +3517,338 @@ Favor su ayuda con su aprobación y la del cliente Chilquinta`;
       },
     };
 
+    /* =========================================================
+       VISTA: PLANTILLA TERRENO
+       Datos ingresados una sola vez (persisten en este navegador) que arman
+       los 3 correos del trabajo en terreno.
+       ========================================================= */
+
+    const TERRENO_STORAGE_KEY = 'plantillaTerrenoDatos';
+
+    function crearDatosTerrenoVacios() {
+      return {
+        usuario: '',
+        ticket: '',
+        ubicacion: '',
+        segmento: '',
+        empresa: '',
+        direccion: '',
+        base: 'Aldunate',
+        motivo: '',
+        equiposNuevos: [{ tipo: '', modelo: '', serie: '' }],
+        equiposRetirados: [{ tipo: '', modelo: '', serie: '', accesorios: '' }],
+      };
+    }
+
+    function cargarDatosTerreno() {
+      const base = crearDatosTerrenoVacios();
+      try {
+        const guardado = JSON.parse(localStorage.getItem(TERRENO_STORAGE_KEY) || 'null');
+        if (guardado && typeof guardado === 'object') {
+          Object.keys(base).forEach((k) => {
+            if (k in guardado) base[k] = guardado[k];
+          });
+          if (!Array.isArray(base.equiposNuevos) || !base.equiposNuevos.length) {
+            base.equiposNuevos = [{ tipo: '', modelo: '', serie: '' }];
+          }
+          if (!Array.isArray(base.equiposRetirados) || !base.equiposRetirados.length) {
+            base.equiposRetirados = [{ tipo: '', modelo: '', serie: '', accesorios: '' }];
+          }
+        }
+      } catch (err) {
+        console.error('No se pudieron leer los datos guardados de Plantilla Terreno:', err);
+      }
+      return base;
+    }
+
+    const PlantillaTerreno = {
+      template: `
+        <div class="checklist">
+          <div class="card shadow-sm checklist__card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-1">
+                <h1 class="checklist__title h4 mb-1">Plantilla Terreno</h1>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @click="limpiarDatos">
+                  Limpiar datos
+                </button>
+              </div>
+              <p class="checklist__subtitle text-muted mb-4">
+                Ingresa los datos una sola vez y los 3 correos se arman solos. Lo último que ingreses queda
+                guardado en este navegador, por si necesitas completarlo más adelante.
+              </p>
+
+              <h2 class="h6 text-uppercase text-muted mb-2">Datos del caso</h2>
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Usuario (nombre completo)</label>
+                  <input v-model="datos.usuario" type="text" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Ticket de referencia (URL)</label>
+                  <input v-model="datos.ticket" type="text" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">Ubicación (comuna)</label>
+                  <input v-model="datos.ubicacion" type="text" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">Segmento</label>
+                  <input v-model="datos.segmento" type="text" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label checklist__label">Empresa (acta de retiro)</label>
+                  <input v-model="datos.empresa" type="text" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label checklist__label">Dirección de instalación</label>
+                  <input v-model="datos.direccion" type="text" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label">Base de retorno</label>
+                  <input v-model="datos.base" type="text" class="form-control" />
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label checklist__label">Fecha GDD (dd/mm/aaaa)</label>
+                  <input v-model="fecha" type="text" class="form-control" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label checklist__label">Motivo del retiro</label>
+                  <input
+                    v-model="datos.motivo"
+                    type="text"
+                    class="form-control"
+                    placeholder="Ej: Reemplazo de notebook a Nombre Apellido"
+                  />
+                </div>
+              </div>
+
+              <div class="row g-4 mb-2">
+                <div class="col-lg-6">
+                  <h2 class="h6 text-uppercase text-muted mb-2">Equipos nuevos (asignación)</h2>
+                  <div
+                    v-for="(eq, index) in datos.equiposNuevos"
+                    :key="'n' + index"
+                    class="row g-2 mb-2 align-items-center"
+                  >
+                    <div class="col-3">
+                      <input v-model="eq.tipo" type="text" class="form-control form-control-sm" placeholder="Tipo" />
+                    </div>
+                    <div class="col-4">
+                      <input v-model="eq.modelo" type="text" class="form-control form-control-sm" placeholder="Modelo" />
+                    </div>
+                    <div class="col-4">
+                      <input v-model="eq.serie" type="text" class="form-control form-control-sm" placeholder="N° serie" />
+                    </div>
+                    <div class="col-1 text-end">
+                      <button type="button" class="btn btn-outline-danger btn-sm" @click="quitarNuevo(index)">✕</button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" @click="agregarNuevo">
+                    + Agregar equipo
+                  </button>
+                </div>
+
+                <div class="col-lg-6">
+                  <h2 class="h6 text-uppercase text-muted mb-2">Equipos retirados</h2>
+                  <div
+                    v-for="(eq, index) in datos.equiposRetirados"
+                    :key="'r' + index"
+                    class="row g-2 mb-2 align-items-center"
+                  >
+                    <div class="col-3">
+                      <input v-model="eq.tipo" type="text" class="form-control form-control-sm" placeholder="Tipo" />
+                    </div>
+                    <div class="col-3">
+                      <input v-model="eq.modelo" type="text" class="form-control form-control-sm" placeholder="Modelo" />
+                    </div>
+                    <div class="col-3">
+                      <input v-model="eq.serie" type="text" class="form-control form-control-sm" placeholder="N° serie" />
+                    </div>
+                    <div class="col-2">
+                      <input v-model="eq.accesorios" type="text" class="form-control form-control-sm" placeholder="Accesorios" />
+                    </div>
+                    <div class="col-1 text-end">
+                      <button type="button" class="btn btn-outline-danger btn-sm" @click="quitarRetirado(index)">✕</button>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" @click="agregarRetirado">
+                    + Agregar equipo
+                  </button>
+                </div>
+              </div>
+
+              <hr />
+
+              <div v-for="correo in correos" :key="correo.id" class="mb-4">
+                <h2 class="h6 text-uppercase text-muted mb-1">{{ correo.titulo }}</h2>
+                <div v-if="correo.aviso" class="alert alert-info py-2 small planilla__info" role="alert">
+                  {{ correo.aviso }}
+                </div>
+                <textarea
+                  class="form-control planilla__output"
+                  rows="12"
+                  readonly
+                  :value="correo.texto"
+                ></textarea>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm mt-2 planilla__copy-btn"
+                  @click="copiar(correo)"
+                >
+                  {{ copiadoId === correo.id ? '¡Copiado!' : 'Copiar al portapapeles' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const datos = reactive(cargarDatosTerreno());
+        const fecha = ref(fechaHoyDDMMAAAA());
+        const copiadoId = ref(null);
+
+        watch(
+          datos,
+          () => {
+            try {
+              localStorage.setItem(TERRENO_STORAGE_KEY, JSON.stringify(datos));
+            } catch (err) {
+              console.error('No se pudieron guardar los datos de Plantilla Terreno:', err);
+            }
+          },
+          { deep: true }
+        );
+
+        function agregarNuevo() {
+          datos.equiposNuevos.push({ tipo: '', modelo: '', serie: '' });
+        }
+        function quitarNuevo(index) {
+          datos.equiposNuevos.splice(index, 1);
+          if (!datos.equiposNuevos.length) agregarNuevo();
+        }
+        function agregarRetirado() {
+          datos.equiposRetirados.push({ tipo: '', modelo: '', serie: '', accesorios: '' });
+        }
+        function quitarRetirado(index) {
+          datos.equiposRetirados.splice(index, 1);
+          if (!datos.equiposRetirados.length) agregarRetirado();
+        }
+
+        function limpiarDatos() {
+          if (!confirm('¿Borrar todos los datos ingresados en Plantilla Terreno?')) return;
+          Object.assign(datos, crearDatosTerrenoVacios());
+          fecha.value = fechaHoyDDMMAAAA();
+          try {
+            localStorage.removeItem(TERRENO_STORAGE_KEY);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+
+        const configPorId = (id) => TEMPLATE_CONFIG.find((t) => t.id === id);
+
+        const correos = computed(() => {
+          const nuevos = datos.equiposNuevos.filter((e) => e.tipo || e.modelo || e.serie);
+          const retirados = datos.equiposRetirados.filter((e) => e.tipo || e.modelo || e.serie);
+
+          // Correo 1: ABM de asignación de kit completo + solicitud de GDD hacia la dirección
+          const lineasNuevos = nuevos
+            .map((e) => {
+              const nombre = [e.tipo, e.modelo].filter(Boolean).join(' ');
+              return e.serie ? `${nombre} s/n ${e.serie}` : nombre;
+            })
+            .join('\n');
+
+          const correo1 = `Estimado Encargado Inventario
+
+Favor su gestión para generar el ABM de asignación de Kit Completo:
+
+${lineasNuevos}
+
+Asignado a:\t${datos.usuario}
+Ubicación:\t${datos.ubicacion}
+Segmento:\t${datos.segmento}
+
+Ticket de referencia: ${datos.ticket}
+
+
+Y Luego por favor. Generar GDD para trasladar esos activos hacia ${datos.direccion}.
+
+Atte.`;
+
+          // Correo 2: Retirar equipo (la plantilla existente)
+          const correo2 = configPorId('retirar-equipo').generate({
+            nombreCompleto: datos.usuario,
+            empresa: datos.empresa,
+            ubicacion: datos.ubicacion,
+            motivo: datos.motivo,
+            items: retirados.map((e) => ({
+              tipo: e.tipo,
+              modelo: e.modelo,
+              numeroSerie: e.serie,
+              accesorios: e.accesorios,
+            })),
+          });
+
+          // Correo 3: Guía de despacho con destinos invertidos (vuelve a la base)
+          const correo3 = configPorId('guia-despacho').generate({
+            ubicacion1: datos.ubicacion,
+            ubicacion2: datos.base,
+            fecha: fecha.value,
+            destino: datos.base,
+            items: retirados.map((e) => ({
+              equipo: e.tipo,
+              modelo: e.modelo,
+              numeroSerie: e.serie,
+            })),
+          });
+
+          return [
+            { id: 'c1', titulo: 'Correo 1 — ABM de asignación + GDD de ida', texto: correo1, aviso: '' },
+            {
+              id: 'c2',
+              titulo: 'Correo 2 — Retirar equipo (acta de retiro)',
+              texto: correo2,
+              aviso:
+                'Para solicitar la desvinculación, se debe enviar correo a la mesa de ayuda servicedesk@chilquintas.cl a vicentet. Con copia a Jose, Joel y Felipe. Además el asunto debe seguir este formato: "Asunto: ABM Retiro - Nombre usuario."',
+            },
+            {
+              id: 'c3',
+              titulo: 'Correo 3 — Guía de despacho de regreso a la base',
+              texto: correo3,
+              aviso:
+                'Para solicitar traslado, se debe enviar correo a la mesa de ayuda servicedesk@chilquintas.cl a vicentet. Con copia a Jose, Joel y Felipe. Además el asunto debe seguir este formato: "GDD - Origen - Destino Fecha". Sin nada más en el asunto.',
+            },
+          ];
+        });
+
+        async function copiar(correo) {
+          try {
+            await navigator.clipboard.writeText(correo.texto);
+            copiadoId.value = correo.id;
+            setTimeout(() => {
+              if (copiadoId.value === correo.id) copiadoId.value = null;
+            }, 2000);
+          } catch (err) {
+            console.error('No se pudo copiar al portapapeles:', err);
+          }
+        }
+
+        return {
+          datos,
+          fecha,
+          correos,
+          copiadoId,
+          agregarNuevo,
+          quitarNuevo,
+          agregarRetirado,
+          quitarRetirado,
+          limpiarDatos,
+          copiar,
+        };
+      },
+    };
+
     const AdminUsuarios = {
       template: `
         <div class="checklist">
@@ -3615,6 +3950,7 @@ Favor su ayuda con su aprobación y la del cliente Chilquinta`;
       routes: [
         { path: '/', component: ChecklistVehiculo },
         { path: '/plantillas', component: GeneradorPlantillas },
+        { path: '/terreno', component: PlantillaTerreno },
         { path: '/equipos', component: ChecklistEquipo },
         { path: '/equipos-sistemas', component: ChecklistEquipoSistemas },
         { path: '/seguimiento', component: SeguimientoCasos },
